@@ -79,7 +79,7 @@ void Panel::drawTaskLine(int y) {
   spr_.setTextFont(1);
   while (line.length() > 4 && spr_.textWidth(line) > PANEL_W - 60) line.remove(line.length() - 1);
   spr_.setTextDatum(BL_DATUM);
-  spr_.setTextColor(g_settings.accent);
+  spr_.setTextColor(COL_MONO);
   spr_.drawString(line, 12, y);
   if (tasksLeft_ > 1) {
     spr_.setTextDatum(BR_DATUM);
@@ -149,10 +149,10 @@ uint16_t Panel::categoryColor(const String &cat) {
   if (cat == "code") return COL_EYE_ICE;
   if (cat == "video") return COL_EYE_ANGRY;
   if (cat == "social") return COL_EYE_LOVE;
-  if (cat == "chat") return 0xA4DF;
+  if (cat == "chat") return COL_TEXT;
   if (cat == "music") return COL_EYE_MUSIC;
-  if (cat == "game") return 0xFD20;
-  if (cat == "browse") return 0x5D7F;
+  if (cat == "game") return COL_TEXT;
+  if (cat == "browse") return COL_TEXT;
   if (cat == "away") return COL_EYE_SLEEPY;
   return COL_SUBTLE;
 }
@@ -225,7 +225,7 @@ void Panel::drawClaude(uint32_t now) {
 void Panel::drawSay(uint32_t now) {
   const uint32_t shown = (now - sayStart_) / 26;
   spr_.setFreeFont(sayFont_);
-  spr_.setTextColor(g_settings.accent);
+  spr_.setTextColor(COL_MONO);
   spr_.setTextDatum(ML_DATUM);
   static const int ys1[] = {44};
   static const int ys2[] = {28, 62};
@@ -242,7 +242,7 @@ void Panel::drawSay(uint32_t now) {
 }
 
 void Panel::drawPomodoro(uint32_t /*now*/) {
-  const uint16_t col = pomoFocus_ ? g_settings.accent : COL_EYE_MUSIC;
+  const uint16_t col = pomoFocus_ ? COL_MONO : COL_EYE_MUSIC;
   const float frac = 1.0f - static_cast<float>(pomoRemain_) / pomoTotal_;
   const uint32_t end = 180 + static_cast<uint32_t>(frac * 359.0f);  // TFT_eSPI arcs: 0 deg = 6 o'clock
   spr_.drawSmoothArc(44, 45, 34, 28, 0, 360, COL_DIM, TFT_BLACK, false);

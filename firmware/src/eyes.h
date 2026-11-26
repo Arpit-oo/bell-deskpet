@@ -59,6 +59,7 @@ class Eyes {
   void drawSparkles(TFT_eSprite &s, int cx, int cy, float scale);
   void drawZzz(TFT_eSprite &s, int x, int y);
   void drawMouth(TFT_eSprite &s, int cx, int y, float scale, uint16_t col);
+  void drawIdleMouth(TFT_eSprite &s, int cx, int y, float scale, uint16_t col);
   void drawNotes(TFT_eSprite &s, int cx, int cy, float scale, uint16_t col);
   float mouthTarget(uint32_t now) const;
   float blinkFactor(uint32_t now);
@@ -87,6 +88,7 @@ class Eyes {
   uint32_t lineStart_ = 0, lineMs_ = 0;
   uint16_t syllables_ = 0;
   float singAmt_ = 0, mouthOpen_ = 0;
+  float smile_ = 0.55f, oMouth_ = 0;  // resting mouth: smile (-1..1) / "o" (0..1)
 
   float bootOpen_ = 1.0f;
   uint32_t now_ = 0;

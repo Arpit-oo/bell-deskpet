@@ -54,7 +54,7 @@ void Brain::apply(const StateMsg &msg) {
   }
   if (msg.hasMusic) {
     music_.setTrack(msg.playing, msg.track, msg.artist, msg.posMs, msg.durMs,
-                    msg.color ? msg.color : COL_EYE_MUSIC);
+                    COL_MONO);
   }
   if (msg.hasLyrics) music_.setLyrics(msg.lyricCur, msg.lyricNext, msg.lyricLineMs);
   if (msg.hasTask) panel_.setTask(msg.taskTitle, msg.taskEst, msg.tasksLeft);

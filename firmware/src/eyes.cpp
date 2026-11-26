@@ -288,6 +288,16 @@ void Eyes::update(uint32_t now) {
 
   bootOpen_ = approach(bootOpen_, 1.0f, dt, 260);
   singAmt_ = approach(singAmt_, singMode_ ? 1.0f : 0.0f, dt, 220);
+  float sm = 0.55f, om = 0.0f;
+  switch (mood_) {
+    case Mood::Happy: case Mood::Excited: case Mood::Music: case Mood::Love: sm = 1.0f; break;
+    case Mood::Sad: case Mood::Angry: sm = -0.8f; break;
+    case Mood::Surprised: sm = 0.0f; om = 1.0f; break;
+    case Mood::Focus: case Mood::Sus: case Mood::Sleepy: sm = 0.05f; break;
+    default: break;
+  }
+  smile_ = approach(smile_, sm, dt, 120);
+  oMouth_ = approach(oMouth_, om, dt, 100);
   mouthOpen_ = approach(mouthOpen_, mouthTarget(now), dt, 40);
 
   updateAnim(now);
@@ -323,7 +333,7 @@ void Eyes::drawEye(TFT_eSprite &s, int cx, int cy, const Shape &e, float scale, 
 
   s.fillSmoothRoundRect(x, y, iw, ih, r, col, TFT_BLACK);
 
-  if (ih > 28 * scale) {
+  if (false) {  // no glint: flat white eyes
     const int gw = max(4, static_cast<int>(w * 0.17f));
     const int gh = max(4, static_cast<int>(h * 0.15f));
     s.fillSmoothRoundRect(x + static_cast<int>(w * 0.20f), y + static_cast<int>(h * 0.16f), gw, gh,
@@ -414,7 +424,28 @@ void Eyes::drawMouth(TFT_eSprite &s, int cx, int y, float scale, uint16_t col) {
   if (h > 9) {
     const int iw = w - 6, ih = h - 6;
     s.fillSmoothRoundRect(cx - iw / 2, y - ih / 2, iw, ih, min(iw, ih) / 2, TFT_BLACK, col);
-    if (o > 0.5f) s.fillEllipse(cx, y + ih / 2 - 3, iw / 3, max(2, ih / 5), COL_EYE_LOVE);  // tongue
+  }
+}
+
+void Eyes::drawIdleMouth(TFT_eSprite &s, int cx, int y, float scale, uint16_t col) {
+  const float th = max(2.0f, 4.5f * scale);
+  if (oMouth_ > 0.5f) {
+    const int r = max(3, static_cast<int>(9 * scale));
+    s.fillSmoothCircle(cx, y, r, col, TFT_BLACK);
+    s.fillSmoothCircle(cx, y, max(1, r - static_cast<int>(th)), TFT_BLACK, col);
+    return;
+  }
+  // Quadratic curve as short thick segments.
+  const float half = 15.0f * scale, dip = 11.0f * scale * smile_;
+  const float x0 = cx - half, y0 = y - dip * 0.3f, x1 = cx, y1 = y + dip * 1.4f, x2 = cx + half, y2 = y0;
+  float px = x0, py = y0;
+  for (int i = 1; i <= 8; i++) {
+    const float t = i / 8.0f, u = 1 - t;
+    const float qx = u * u * x0 + 2 * u * t * x1 + t * t * x2;
+    const float qy = u * u * y0 + 2 * u * t * y1 + t * t * y2;
+    s.drawWideLine(px, py, qx, qy, th, col, TFT_BLACK);
+    px = qx;
+    py = qy;
   }
 }
 
@@ -486,6 +517,7 @@ void Eyes::draw(TFT_eSprite &s, int cx, int cy, float scale) {
     }
   }
 
+  if (singAmt_ < 0.5f) drawIdleMouth(s, cx, eyeY + static_cast<int>(52 * scale), scale, col);
   if (singAmt_ > 0.05f && curHearts_ <= 0.5f) {
     drawMouth(s, cx, eyeY + static_cast<int>(50 * scale), scale, col);
     drawNotes(s, baseCx, cy, scale, col);

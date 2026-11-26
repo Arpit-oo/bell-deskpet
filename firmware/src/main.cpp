@@ -64,7 +64,7 @@ constexpr uint16_t kClaudeOrange = 0xD3AA;
 static void applyLook() {
   tft.setRotation(g_settings.rotation);
   tft.fillScreen(TFT_BLACK);
-  eyes.setBaseColor(g_settings.eyeColor);
+  eyes.setBaseColor(COL_MONO);
   panel.markDirty();
 }
 
@@ -276,7 +276,7 @@ static void handleSettingsPost() {
   if (g_settings.apply(doc.as<JsonVariantConst>())) {
     g_settings.save(prefs);
     if (g_settings.rotation != oldRot) applyLook();
-    eyes.setBaseColor(g_settings.eyeColor);
+    eyes.setBaseColor(COL_MONO);
     panel.markDirty();
   }
   server.send(200, "application/json", g_settings.toJson());
@@ -312,13 +312,13 @@ static void onNetworkUp() {
     g_otaActive = true;
     tft.fillScreen(TFT_BLACK);
     tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(g_settings.eyeColor, TFT_BLACK);
+    tft.setTextColor(COL_MONO, TFT_BLACK);
     tft.drawString("Updating...", SCREEN_W / 2, SCREEN_H / 2 - 18, 4);
     tft.drawRoundRect(40, SCREEN_H / 2 + 8, SCREEN_W - 80, 12, 6, COL_DIM);
   });
   ArduinoOTA.onProgress([](unsigned int done, unsigned int total) {
     const int w = static_cast<int>((static_cast<uint64_t>(SCREEN_W - 84) * done) / total);
-    tft.fillRoundRect(42, SCREEN_H / 2 + 10, max(8, w), 8, 4, g_settings.eyeColor);
+    tft.fillRoundRect(42, SCREEN_H / 2 + 10, max(8, w), 8, 4, COL_MONO);
   });
   ArduinoOTA.onError([](ota_error_t e) {
     Serial.printf("[ota] error %u\n", e);
