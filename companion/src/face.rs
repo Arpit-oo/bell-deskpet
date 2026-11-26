@@ -54,6 +54,7 @@ pub const GOLD: [f32; 3] = [255.0, 214.0, 90.0];
 const ANGRY: [f32; 3] = [255.0, 80.0, 70.0];
 pub const LOVE: [f32; 3] = [255.0, 105.0, 180.0];
 const SLEEPY: [f32; 3] = [90.0, 160.0, 200.0];
+pub const WHITE: [f32; 3] = [248.0, 248.0, 246.0];
 
 #[derive(Clone, Copy)]
 struct Shape {
@@ -265,6 +266,11 @@ pub struct Face {
     sing_amt: f32,
     mouth_open: f32,
 
+    /// Monochrome look: white eyes, no glint, always a small mouth.
+    mono: bool,
+    smile: f32,
+    o_mouth: f32,
+
     boot_open: f32,
     now: f32,
     rng: Rng,
@@ -308,10 +314,17 @@ impl Face {
             syllables: 0,
             sing_amt: 0.0,
             mouth_open: 0.0,
+            mono: false,
+            smile: 0.6,
+            o_mouth: 0.0,
             boot_open: 0.0,
             now: 0.0,
             rng: Rng::new(),
         }
+    }
+
+    pub fn set_mono(&mut self, on: bool) {
+        self.mono = on;
     }
 
     pub fn set_mood(&mut self, m: Mood) {
@@ -486,9 +499,19 @@ impl Face {
         self.sparkles = approach(self.sparkles, self.tgt.sparkles, dt, 200.0);
         self.zzz = approach(self.zzz, self.tgt.zzz, dt, 300.0);
         self.brows = approach(self.brows, self.tgt.brows, dt, 120.0);
+        let tc = if !self.mono { self.tgt.color } else if self.tgt.hearts > 0.5 { LOVE } else { WHITE };
         for i in 0..3 {
-            self.col[i] = approach(self.col[i], self.tgt.color[i], dt, 150.0);
+            self.col[i] = approach(self.col[i], tc[i], dt, 150.0);
         }
+        let (smile, o) = match self.mood {
+            Mood::Happy | Mood::Excited | Mood::Music | Mood::Love => (1.0, 0.0),
+            Mood::Idle => (0.55, 0.0),
+            Mood::Sad | Mood::Angry => (-0.8, 0.0),
+            Mood::Surprised => (0.0, 1.0),
+            Mood::Focus | Mood::Sus | Mood::Sleepy => (0.05, 0.0),
+        };
+        self.smile = approach(self.smile, smile, dt, 120.0);
+        self.o_mouth = approach(self.o_mouth, o, dt, 100.0);
         self.boot_open = approach(self.boot_open, 1.0, dt, 260.0);
         self.sing_amt = approach(self.sing_amt, if self.sing_mode > 0 { 1.0 } else { 0.0 }, dt, 220.0);
         self.mouth_open = approach(self.mouth_open, self.mouth_target(), dt, 40.0);
@@ -539,10 +562,6 @@ impl Face {
         }
     }
 
-    pub fn color(&self) -> [f32; 3] {
-        self.col
-    }
-
     /// Draws the face centred on (cx, cy) px. Eye shapes go into `layer` (cut-outs
     /// use Clear so the layer stays transparent); floating effects (notes,
     /// sparkles) go into `fx`, which is not clipped to the pet's screen.
@@ -586,8 +605,8 @@ impl Face {
             l.y_off += self.mods.dy_l;
             r.y_off += self.mods.dy_r;
 
-            eye(layer, l_cx, eye_y, &l, l_scale, true, col);
-            eye(layer, r_cx, eye_y, &r, r_scale, false, col);
+            eye(layer, l_cx, eye_y, &l, l_scale, true, col, !self.mono);
+            eye(layer, r_cx, eye_y, &r, r_scale, false, col, !self.mono);
 
             if self.brows > 0.15 {
                 let l_top = eye_y - self.cur_l.h * l_scale * self.mods.h_scale / 2.0 + l.y_off * l_scale;
@@ -597,6 +616,11 @@ impl Face {
             }
         }
 
+        if self.mono && self.sing_amt < 0.6 {
+            let mut c = col;
+            c.apply_opacity(1.0 - self.sing_amt / 0.6);
+            self.idle_mouth(layer, cx, eye_y + 58.0 * k, k, c);
+        }
         if self.sing_amt > 0.05 && self.hearts <= 0.5 {
             self.mouth(layer, cx, eye_y + 50.0 * k, k, col);
             self.notes(fx, base_cx, cy, k, col);
@@ -619,6 +643,29 @@ impl Face {
         let th = (7.0 * k * self.brows).max(1.5);
         let (outer, inner) = if is_left { (cx - half_w, cx + half_w) } else { (cx + half_w, cx - half_w) };
         line(s, outer, by - dy, inner, by + dy, th, col);
+    }
+
+    fn idle_mouth(&self, s: &mut Pixmap, cx: f32, y: f32, k: f32, col: Color) {
+        let th = (4.5 * k).max(1.5);
+        let st = Stroke { width: th, line_cap: LineCap::Round, ..Default::default() };
+        let p = paint(col, BlendMode::SourceOver);
+        if self.o_mouth > 0.5 {
+            let (rx, ry) = (8.0 * k, 10.0 * k);
+            if let Some(r) = Rect::from_xywh(cx - rx, y - ry, 2.0 * rx, 2.0 * ry) {
+                if let Some(path) = PathBuilder::from_oval(r) {
+                    s.stroke_path(&path, &p, &st, Transform::identity(), None);
+                }
+            }
+            return;
+        }
+        let half = 15.0 * k;
+        let dip = 11.0 * k * self.smile;
+        let mut pb = PathBuilder::new();
+        pb.move_to(cx - half, y - dip * 0.3);
+        pb.quad_to(cx, y + dip * 1.4, cx + half, y - dip * 0.3);
+        if let Some(path) = pb.finish() {
+            s.stroke_path(&path, &p, &st, Transform::identity(), None);
+        }
     }
 
     fn mouth(&self, s: &mut Pixmap, cx: f32, y: f32, k: f32, col: Color) {
@@ -750,7 +797,8 @@ fn poly(s: &mut Pixmap, pts: &[(f32, f32)], c: Color, mode: BlendMode) {
     }
 }
 
-fn eye(s: &mut Pixmap, cx: f32, cy: f32, e: &Shape, k: f32, is_left: bool, col: Color) {
+#[allow(clippy::too_many_arguments)]
+fn eye(s: &mut Pixmap, cx: f32, cy: f32, e: &Shape, k: f32, is_left: bool, col: Color, glint: bool) {
     let w = e.w * k;
     let h = e.h * k;
     if w < 2.0 || h < 1.0 {
@@ -762,7 +810,7 @@ fn eye(s: &mut Pixmap, cx: f32, cy: f32, e: &Shape, k: f32, is_left: bool, col: 
     let r = (e.r * k).min(w / 2.0).min(h / 2.0);
     rrect(s, x, y, w, h, r, col, BlendMode::SourceOver);
 
-    if h > 28.0 * k {
+    if glint && h > 28.0 * k {
         let gw = (w * 0.17).max(3.0);
         let gh = (h * 0.15).max(3.0);
         rrect(s, x + w * 0.20, y + h * 0.16, gw, gh, gw.min(gh) / 2.0, Color::from_rgba8(255, 255, 255, 235), BlendMode::SourceOver);

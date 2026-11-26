@@ -11,10 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tiny_skia::{
-    BlendMode, Color, FillRule, GradientStop, LinearGradient, Mask, Paint, Pixmap, PixmapPaint, Point,
-    RadialGradient, SpreadMode, Stroke, Transform,
-};
+use tiny_skia::{Color, FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapPaint, Transform};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::DwmFlush;
 use windows_sys::Win32::Graphics::Gdi::{
@@ -31,15 +28,16 @@ use crate::face::{self, Anim, Face, Mood};
 
 const APP_URL: &str = "http://localhost:7777";
 
-// Logical layout (96-dpi pixels, before the size preset).
-const WIN_W: f32 = 290.0;
-const WIN_H: f32 = 262.0;
-const BODY_W: f32 = 200.0;
-const BODY_H: f32 = 124.0;
-const BODY_BOTTOM_PAD: f32 = 22.0;
-const BODY_R: f32 = 40.0;
-const BEZEL: f32 = 7.0;
-const BUBBLE_MAX_W: f32 = 254.0;
+// Logical layout (96-dpi pixels, before the size preset). Bell sits flush
+// against the top edge of the screen like a notch: a black block with rounded
+// bottom corners. When it talks, a wider bar grows out of the top (a "T").
+const WIN_W: f32 = 600.0;
+const WIN_H: f32 = 210.0;
+const NOTCH_W: f32 = 190.0;
+const NOTCH_H: f32 = 112.0;
+const NOTCH_R: f32 = 30.0;
+const BAR_MAX_W: f32 = 560.0;
+const BAR_MIN_W: f32 = 300.0;
 
 const SIZES: [(&str, f32); 3] = [("Small", 0.8), ("Medium", 1.0), ("Large", 1.3)];
 
@@ -160,7 +158,7 @@ struct Text {
 impl Text {
     fn load() -> Option<Text> {
         let dir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
-        for f in ["seguisb.ttf", "segoeuib.ttf", "segoeui.ttf", "arial.ttf"] {
+        for f in ["segoeuib.ttf", "seguisb.ttf", "segoeui.ttf", "arialbd.ttf", "arial.ttf"] {
             if let Ok(bytes) = std::fs::read(format!("{dir}\\Fonts\\{f}")) {
                 if let Ok(font) = fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()) {
                     return Some(Text { font, cache: HashMap::new() });
@@ -324,6 +322,18 @@ fn cursor() -> (i32, i32) {
     (p.x, p.y)
 }
 
+/// Full bounds of the monitor nearest to (x, y).
+fn monitor_at(x: i32, y: i32) -> RECT {
+    unsafe {
+        let mon = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        GetMonitorInfoW(mon, &mut mi);
+        mi.rcMonitor
+    }
+}
+
+#[allow(dead_code)]
 fn work_area_at(x: i32, y: i32) -> RECT {
     unsafe {
         let mon = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
@@ -501,8 +511,16 @@ struct Pet {
     claude: String,
     claude_since: f32,
 
+    // talking bar
     bubble: Option<Bubble>,
     bubble_a: f32,
+    bar_w: f32,
+    bar_h: f32,
+    bar_lines: Vec<String>,
+    bar_kind: BubbleKind,
+    bar_start: f32,
+    bar_px: f32,
+
     hidden_until: Option<Instant>,
     fs_hidden: bool,
     alpha: f32,
@@ -510,8 +528,50 @@ struct Pet {
     appear: f32,
 }
 
+/// Pixel geometry for the current frame.
+struct Geo {
+    body: (f32, f32, f32, f32),
+    bar: (f32, f32, f32), // x, w, h (top is 0)
+    face: (f32, f32),
+    k: f32,
+}
+
 fn new_pixmap(w: i32, h: i32) -> Result<Pixmap, String> {
     Pixmap::new(w as u32, h as u32).ok_or_else(|| "pixmap alloc failed".to_string())
+}
+
+/// Rectangle with square top corners and rounded bottom corners.
+fn notch_path(x: f32, y: f32, w: f32, h: f32, r: f32) -> Option<tiny_skia::Path> {
+    if w <= 0.0 || h <= 0.0 {
+        return None;
+    }
+    let r = r.min(w / 2.0).min(h).max(0.0);
+    let c = r * 0.552_284_8;
+    let mut pb = PathBuilder::new();
+    pb.move_to(x, y);
+    pb.line_to(x + w, y);
+    pb.line_to(x + w, y + h - r);
+    pb.cubic_to(x + w, y + h - r + c, x + w - r + c, y + h, x + w - r, y + h);
+    pb.line_to(x + r, y + h);
+    pb.cubic_to(x + r - c, y + h, x, y + h - r + c, x, y + h - r);
+    pb.close();
+    pb.finish()
+}
+
+fn fill(pm: &mut Pixmap, path: &tiny_skia::Path, c: Color) {
+    let mut p = Paint::default();
+    p.anti_alias = true;
+    p.set_color(c);
+    pm.fill_path(path, &p, FillRule::Winding, Transform::identity(), None);
+}
+
+fn asterisk(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, spin: f32, w: f32) {
+    let orange = Color::from_rgba8(217, 119, 87, 255);
+    for i in 0..4 {
+        let a = i as f32 * std::f32::consts::PI / 4.0 + spin;
+        let (dx, dy) = (a.cos() * r, a.sin() * r);
+        face::line(pm, cx - dx, cy - dy, cx + dx, cy + dy, w, orange);
+    }
 }
 
 impl Pet {
@@ -526,15 +586,14 @@ impl Pet {
         if w == self.w && h == self.h && dpi == self.dpi {
             return Ok(());
         }
-        // Keep the body's bottom-centre anchored when the size changes.
         if self.w > 0 {
-            self.x += (self.w - w) / 2;
-            self.y += self.h - h;
+            self.x += (self.w - w) / 2; // keep centred
         }
         self.dpi = dpi;
         self.scale = scale;
         self.w = w;
         self.h = h;
+        self.bar_w = NOTCH_W * scale;
         self.canvas = new_pixmap(w, h)?;
         self.layer = new_pixmap(w, h)?;
         self.fx = new_pixmap(w, h)?;
@@ -542,43 +601,55 @@ impl Pet {
         Ok(())
     }
 
-    fn body_rect(&self) -> (f32, f32, f32, f32) {
+    fn geo(&self) -> Geo {
         let s = self.scale;
-        let pop = 1.0 + 0.035 * self.hover - 0.06 * self.squash;
-        let (bw, bh) = (BODY_W * s * (1.0 + 0.03 * self.squash) * pop, BODY_H * s * pop * (1.0 - 0.04 * self.squash));
+        let pop = 1.0 + 0.04 * self.hover - 0.05 * self.squash;
         let cx = self.w as f32 / 2.0;
-        let bottom = self.h as f32 - BODY_BOTTOM_PAD * s;
-        let appear = ease_out_back(self.appear);
-        let (bw, bh) = (bw * (0.6 + 0.4 * appear), bh * (0.6 + 0.4 * appear));
-        (cx - bw / 2.0, bottom - bh, bw, bh)
+        let bw = NOTCH_W * s * pop * (1.0 + 0.03 * self.squash);
+        let base_h = NOTCH_H * s * pop;
+        let join = self.bar_h * 0.72;
+        let bh = base_h + join;
+        // Drop in from the top edge on start.
+        let by = -(1.0 - ease_out_back(self.appear)) * bh;
+        Geo {
+            body: (cx - bw / 2.0, by, bw, bh),
+            bar: (cx - self.bar_w / 2.0, self.bar_w, self.bar_h),
+            face: (cx, by + join + base_h * 0.5 + 2.0 * s),
+            k: bw / 330.0,
+        }
     }
 
-    fn body_contains(&self, sx: i32, sy: i32) -> bool {
-        let (bx, by, bw, bh) = self.body_rect();
-        let (lx, ly) = ((sx - self.x) as f32, (sy - self.y) as f32);
-        lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh
+    fn local(&self, sx: i32, sy: i32) -> (f32, f32) {
+        ((sx - self.x) as f32, (sy - self.y) as f32)
     }
 
-    fn bubble_rect(&mut self) -> Option<(f32, f32, f32, f32, Vec<String>, f32)> {
-        let b = self.bubble.as_ref()?;
-        let s = self.scale;
-        let px = match b.kind {
-            BubbleKind::Lyric | BubbleKind::Track => 13.0 * s,
-            _ => 14.5 * s,
-        };
-        let text = b.text.clone();
-        let t = self.text.as_mut()?;
-        let lines = t.wrap(&text, px, (BUBBLE_MAX_W - 28.0) * s, 3);
-        let tw = lines.iter().map(|l| t.width(l, px)).fold(0.0, f32::max);
-        let lh = px * 1.32;
-        let (pad_x, pad_y) = (14.0 * s, 9.0 * s);
-        let bw = (tw + 2.0 * pad_x).max(54.0 * s);
-        let bh = lines.len() as f32 * lh + 2.0 * pad_y;
-        let (bx0, by0, _, _) = self.body_rect();
-        let _ = bx0;
-        let x = ((self.w as f32 - bw) / 2.0).max(2.0);
-        let y = by0 - 12.0 * s - bh;
-        Some((x, y.max(2.0), bw, bh, lines, px))
+    fn in_bar(&self, sx: i32, sy: i32) -> bool {
+        let (rx, rw, rh) = self.geo().bar;
+        let (lx, ly) = self.local(sx, sy);
+        rh > 2.0 && lx >= rx && lx <= rx + rw && ly >= 0.0 && ly <= rh
+    }
+
+    fn hit(&self, sx: i32, sy: i32) -> bool {
+        let (bx, by, bw, bh) = self.geo().body;
+        let (lx, ly) = self.local(sx, sy);
+        (lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh) || self.in_bar(sx, sy)
+    }
+
+    /// Snap to the top edge of whichever monitor the pet is over.
+    fn snap_top(&mut self, hint_y: i32) {
+        let m = monitor_at(self.x + self.w / 2, hint_y);
+        let half_notch = (NOTCH_W * self.scale) as i32 / 2;
+        let lo = m.left - self.w / 2 + half_notch;
+        let hi = m.right - self.w / 2 - half_notch;
+        self.x = self.x.clamp(lo.min(hi), hi.max(lo));
+        self.y = m.top;
+    }
+
+    fn place_default(&mut self) {
+        let (cx, cy) = cursor();
+        let m = monitor_at(cx, cy);
+        self.x = (m.left + m.right) / 2 - self.w / 2;
+        self.y = m.top;
     }
 
     // ------------------------------------------------------------ per-frame logic
@@ -606,11 +677,7 @@ impl Pet {
                         self.temp_mood = Some((Mood::Happy, now + 1200.0));
                     } else {
                         let (cx, cy) = cursor();
-                        let in_bubble = self.bubble_rect().is_some_and(|(x, y, w, h, _, _)| {
-                            let (lx, ly) = ((cx - self.x) as f32, (cy - self.y) as f32);
-                            lx >= x && lx <= x + w && ly >= y && ly <= y + h
-                        });
-                        if in_bubble {
+                        if self.in_bar(cx, cy) && self.bubble.is_some() {
                             if let Some(b) = self.bubble.as_mut() {
                                 b.until = now;
                             }
@@ -626,30 +693,26 @@ impl Pet {
 
         if let Some((c0, w0, _)) = self.pressed {
             let c = cursor();
-            let (dx, dy) = (c.0 - c0.0, c.1 - c0.1);
-            if !self.dragging && dx * dx + dy * dy > 16 {
+            let dx = c.0 - c0.0;
+            if !self.dragging && (dx.abs() > 4 || (c.1 - c0.1).abs() > 4) {
                 self.dragging = true;
             }
             if self.dragging {
+                // Slides along the top edge only (and hops monitors).
                 self.x = w0.0 + dx;
-                self.y = w0.1 + dy;
+                self.snap_top(c.1);
             }
         }
     }
 
     fn pet(&mut self, now: f32) {
-        let pick = (now as u64 / 7) % 3;
-        match pick {
-            0 => {
-                self.temp_mood = Some((Mood::Love, now + 1600.0));
-            }
+        match (now as u64 / 7) % 3 {
+            0 => self.temp_mood = Some((Mood::Love, now + 1600.0)),
             1 => {
                 self.temp_mood = Some((Mood::Happy, now + 1400.0));
                 self.face.play(Anim::Peek);
             }
-            _ => {
-                self.temp_mood = Some((Mood::Excited, now + 1200.0));
-            }
+            _ => self.temp_mood = Some((Mood::Excited, now + 1200.0)),
         }
     }
 
@@ -673,13 +736,13 @@ impl Pet {
             AppendMenuW(m, MF_STRING | MF_POPUP, sub as usize, wide("Size").as_ptr());
             AppendMenuW(m, MF_STRING | if self.prefs.lyrics { MF_CHECKED } else { 0 }, LYRICS, wide("Show lyrics").as_ptr());
             AppendMenuW(m, MF_STRING | if self.prefs.follow_mouse { MF_CHECKED } else { 0 }, FOLLOW, wide("Eyes follow mouse").as_ptr());
-            AppendMenuW(m, MF_STRING, RESET, wide("Move to corner").as_ptr());
+            AppendMenuW(m, MF_STRING, RESET, wide("Centre on screen").as_ptr());
             AppendMenuW(m, MF_STRING, HIDE, wide("Hide for 30 minutes").as_ptr());
             AppendMenuW(m, MF_SEPARATOR, 0, std::ptr::null());
             AppendMenuW(m, MF_STRING, QUIT, wide("Quit Bell").as_ptr());
             let (cx, cy) = cursor();
             SetForegroundWindow(self.hwnd);
-            let cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, cx, cy, 0, self.hwnd, std::ptr::null()) as usize;
+            let cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_TOPALIGN, cx, cy, 0, self.hwnd, std::ptr::null()) as usize;
             DestroyMenu(m);
             match cmd {
                 OPEN => open_app(),
@@ -704,13 +767,6 @@ impl Pet {
         }
     }
 
-    fn place_default(&mut self) {
-        let (cx, cy) = cursor();
-        let wa = work_area_at(cx, cy);
-        self.x = wa.right - self.w - (16.0 * self.scale) as i32;
-        self.y = wa.bottom - self.h + (6.0 * self.scale) as i32;
-    }
-
     fn sync_feed(&mut self, feed: &Mutex<Feed>, now: f32) -> Mood {
         let f = feed.lock().unwrap();
 
@@ -726,23 +782,23 @@ impl Pet {
         if f.claude != self.claude {
             self.claude = f.claude.clone();
             self.claude_since = now;
+            let claude_bubble = self.bubble.as_ref().is_some_and(|x| x.kind == BubbleKind::Claude);
             match self.claude.as_str() {
                 "waiting" => {
                     let what = if f.claude_project.is_empty() { String::new() } else { format!(" ({})", f.claude_project) };
-                    let b = Bubble { kind: BubbleKind::Claude, text: format!("Claude needs you{what}"), start: now, until: f32::MAX };
                     if self.bubble.as_ref().is_none_or(|x| x.kind != BubbleKind::Say) {
-                        self.bubble = Some(b);
+                        self.bubble = Some(Bubble { kind: BubbleKind::Claude, text: format!("Claude needs you{what}"), start: now, until: f32::MAX });
                     }
                 }
                 "done" => {
                     self.temp_mood = Some((Mood::Happy, now + 2500.0));
-                    if self.bubble.as_ref().is_some_and(|x| x.kind == BubbleKind::Claude) {
-                        self.bubble = None;
+                    if claude_bubble {
+                        self.bubble.as_mut().unwrap().until = now;
                     }
                 }
                 _ => {
-                    if self.bubble.as_ref().is_some_and(|x| x.kind == BubbleKind::Claude) {
-                        self.bubble = None;
+                    if claude_bubble {
+                        self.bubble.as_mut().unwrap().until = now;
                     }
                 }
             }
@@ -762,7 +818,9 @@ impl Pet {
         if f.lyric != self.last_lyric {
             self.last_lyric = f.lyric.clone();
             self.lyric_at = now;
-            if self.prefs.lyrics && f.playing && !f.lyric.is_empty()
+            if self.prefs.lyrics
+                && f.playing
+                && !f.lyric.is_empty()
                 && self.bubble.as_ref().is_none_or(|b| b.kind == BubbleKind::Lyric || (b.kind == BubbleKind::Track && now - b.start > 2500.0))
             {
                 let ms = if f.line_ms > 0 { f.line_ms as f32 } else { 4000.0 };
@@ -798,6 +856,43 @@ impl Pet {
         Mood::parse(&f.mood)
     }
 
+    /// Grow/shrink the talking bar toward the current bubble's size.
+    fn update_bar(&mut self, now: f32, dt: f32) {
+        let s = self.scale;
+        let on = self.bubble.as_ref().is_some_and(|b| now <= b.until);
+        if !on && self.bar_h < 1.0 {
+            self.bubble = None;
+        }
+        let (tw, th) = if on {
+            let b = self.bubble.as_ref().unwrap();
+            let (text, kind, start) = (b.text.clone(), b.kind, b.start);
+            let px = 16.5 * s;
+            let icon = if kind == BubbleKind::Say { 0.0 } else { 28.0 * s };
+            let mut size = (NOTCH_W * s, 0.0);
+            if let Some(t) = self.text.as_mut() {
+                let lines = t.wrap(&text, px, (BAR_MAX_W - 56.0) * s - icon, 2);
+                let tw = lines.iter().map(|l| t.width(l, px)).fold(0.0, f32::max);
+                let lh = px * 1.3;
+                size = (((tw + icon + 56.0 * s).max(BAR_MIN_W * s)).min(BAR_MAX_W * s), lines.len() as f32 * lh + 26.0 * s);
+                self.bar_lines = lines;
+            }
+            self.bar_kind = kind;
+            self.bar_start = start;
+            self.bar_px = px;
+            size
+        } else {
+            (NOTCH_W * s, 0.0)
+        };
+        let tau = if on { 95.0 } else { 120.0 };
+        self.bar_w = approach(self.bar_w, tw, dt, tau);
+        self.bar_h = approach(self.bar_h, th, dt, tau);
+        self.bubble_a = approach(self.bubble_a, if on { 1.0 } else { 0.0 }, dt, if on { 160.0 } else { 50.0 });
+        if self.bar_h < 0.5 && !on {
+            self.bar_h = 0.0;
+            self.bar_lines.clear();
+        }
+    }
+
     fn frame(&mut self, feed: &Mutex<Feed>, dt: f32) -> Result<(), String> {
         let now = self.ms();
         self.resize()?;
@@ -805,6 +900,7 @@ impl Pet {
 
         let mood = self.sync_feed(feed, now);
         self.face.set_mood(mood);
+        self.update_bar(now, dt);
 
         // Hover + gaze.
         let c = cursor();
@@ -812,32 +908,23 @@ impl Pet {
             self.last_cursor = c;
             self.cursor_moved_at = now;
         }
-        let hovering = self.body_contains(c.0, c.1) || self.pressed.is_some();
+        let hovering = self.hit(c.0, c.1) || self.pressed.is_some();
         self.hover = approach(self.hover, if hovering { 1.0 } else { 0.0 }, dt, 90.0);
         self.squash = approach(self.squash, if self.pressed.is_some() && !self.dragging { 0.6 } else { 0.0 }, dt, 70.0);
-        self.appear = (self.appear + dt / 450.0).min(1.0);
+        self.appear = (self.appear + dt / 550.0).min(1.0);
 
-        let (bx, by, bw, bh) = self.body_rect();
-        let fcx = self.x as f32 + bx + bw / 2.0;
-        let fcy = self.y as f32 + by + bh / 2.0;
+        let g = self.geo();
+        let fcx = self.x as f32 + g.face.0;
+        let fcy = self.y as f32 + g.face.1;
         let gaze = if self.prefs.follow_mouse && (now - self.cursor_moved_at < 2500.0 || hovering) {
-            let dx = (c.0 as f32 - fcx) / (420.0 * self.scale);
-            let dy = (c.1 as f32 - fcy) / (320.0 * self.scale);
-            Some((dx, dy))
+            Some(((c.0 as f32 - fcx) / (420.0 * self.scale), (c.1 as f32 - fcy) / (320.0 * self.scale)))
         } else {
             None
         };
         self.face.set_gaze(gaze);
         self.face.update(now);
 
-        // Bubble lifetime.
-        if self.bubble.as_ref().is_some_and(|b| now > b.until) && self.bubble_a < 0.02 {
-            self.bubble = None;
-        }
-        let bubble_on = self.bubble.as_ref().is_some_and(|b| now <= b.until);
-        self.bubble_a = approach(self.bubble_a, if bubble_on { 1.0 } else { 0.0 }, dt, 70.0);
-
-        // Visibility: manual hide, fullscreen apps.
+        // Visibility: manual hide, fullscreen apps. Re-assert topmost now and then.
         if now - self.last_checks > 1000.0 {
             self.last_checks = now;
             self.fs_hidden = fullscreen_app_active(self.hwnd);
@@ -861,112 +948,70 @@ impl Pet {
 
     fn render(&mut self, now: f32) {
         let s = self.scale;
+        let g = self.geo();
         self.canvas.fill(Color::TRANSPARENT);
         self.layer.fill(Color::TRANSPARENT);
         self.fx.fill(Color::TRANSPARENT);
+        let black = Color::from_rgba8(0, 0, 0, 255);
 
-        let (bx, by, bw, bh) = self.body_rect();
-        let r = BODY_R * s * (bw / (BODY_W * s));
-
-        // Soft shadow.
-        for i in 0..6 {
-            let g = i as f32 * 2.2 * s;
-            let a = (16 - i * 2) as u8;
-            face::rrect(&mut self.canvas, bx - g + 2.0 * s, by - g + 9.0 * s, bw + 2.0 * g - 4.0 * s, bh + 2.0 * g - 6.0 * s, r + g, Color::from_rgba8(0, 0, 0, a), BlendMode::SourceOver);
+        let (bx, by, bw, bh) = g.body;
+        let body_path = notch_path(bx, by - 2.0, bw, bh + 2.0, NOTCH_R * s);
+        if let Some(p) = &body_path {
+            fill(&mut self.canvas, p, black);
         }
 
-        // Shell (bezel) with a vertical gradient + rim light.
-        if let Some(path) = face::rrect_path(bx, by, bw, bh, r) {
-            let mut p = Paint::default();
-            p.anti_alias = true;
-            p.shader = LinearGradient::new(
-                Point::from_xy(0.0, by),
-                Point::from_xy(0.0, by + bh),
-                vec![
-                    GradientStop::new(0.0, Color::from_rgba8(58, 62, 74, 255)),
-                    GradientStop::new(1.0, Color::from_rgba8(22, 24, 30, 255)),
-                ],
-                SpreadMode::Pad,
-                Transform::identity(),
-            )
-            .unwrap_or(tiny_skia::Shader::SolidColor(Color::from_rgba8(30, 32, 40, 255)));
-            self.canvas.fill_path(&path, &p, FillRule::Winding, Transform::identity(), None);
-            let mut st = Paint::default();
-            st.anti_alias = true;
-            st.set_color(Color::from_rgba8(255, 255, 255, 34));
-            self.canvas.stroke_path(&path, &st, &Stroke { width: 1.2 * s, ..Default::default() }, Transform::identity(), None);
-        }
-
-        // Screen.
-        let in_ = BEZEL * s * (bw / (BODY_W * s));
-        let (sx, sy, sw, shh, sr) = (bx + in_, by + in_, bw - 2.0 * in_, bh - 2.0 * in_, (r - in_).max(4.0));
-        face::rrect(&mut self.canvas, sx, sy, sw, shh, sr, Color::from_rgba8(5, 6, 9, 255), BlendMode::SourceOver);
-
-        // Faint glow of the eye colour behind the eyes.
-        let col = self.face.color();
-        if let Some(path) = face::rrect_path(sx, sy, sw, shh, sr) {
-            let mut p = Paint::default();
-            p.anti_alias = true;
-            if let Some(sh) = RadialGradient::new(
-                Point::from_xy(sx + sw / 2.0, sy + shh / 2.0),
-                Point::from_xy(sx + sw / 2.0, sy + shh / 2.0),
-                sw * 0.55,
-                vec![GradientStop::new(0.0, face::rgba(col, 40)), GradientStop::new(1.0, face::rgba(col, 0))],
-                SpreadMode::Pad,
-                Transform::identity(),
-            ) {
-                p.shader = sh;
-                self.canvas.fill_path(&path, &p, FillRule::Winding, Transform::identity(), None);
+        // Talking bar + concave fillets where it meets the body.
+        let (rx, rw, rh) = g.bar;
+        if rh > 1.0 {
+            let rr = (20.0 * s).min(rh / 2.0);
+            if let Some(p) = notch_path(rx, -2.0, rw, rh + 2.0, rr) {
+                fill(&mut self.canvas, &p, black);
+            }
+            let f = (12.0 * s).min((rw - bw) / 2.0 - rr).min(bh - rh).min(rh);
+            if f > 1.0 {
+                let c = f * 0.552_284_8;
+                let yb = rh;
+                for side in [-1.0f32, 1.0] {
+                    let ex = if side < 0.0 { bx } else { bx + bw };
+                    let mut pb = PathBuilder::new();
+                    pb.move_to(ex, yb - 1.0);
+                    pb.line_to(ex + side * f, yb - 1.0);
+                    pb.line_to(ex + side * f, yb);
+                    pb.cubic_to(ex + side * (f - c), yb, ex, yb + f - c, ex, yb + f);
+                    pb.close();
+                    if let Some(p) = pb.finish() {
+                        fill(&mut self.canvas, &p, black);
+                    }
+                }
             }
         }
 
-        // Face, clipped to the screen.
-        let k = sw / 300.0;
-        self.face.draw(&mut self.layer, &mut self.fx, sx + sw / 2.0, sy + shh / 2.0 + 2.0 * s, k);
-
-        if let (Some(mut mask), Some(path)) = (Mask::new(self.w as u32, self.h as u32), face::rrect_path(sx, sy, sw, shh, sr)) {
-            mask.fill_path(&path, FillRule::Winding, true, Transform::identity());
-            self.canvas.draw_pixmap(0, 0, self.layer.as_ref(), &PixmapPaint::default(), Transform::identity(), Some(&mask));
-        }
-
-        // Glass glare.
-        if let Some(path) = face::rrect_path(sx, sy, sw, shh * 0.45, sr) {
-            let mut p = Paint::default();
-            p.anti_alias = true;
-            if let Some(sh) = LinearGradient::new(
-                Point::from_xy(0.0, sy),
-                Point::from_xy(0.0, sy + shh * 0.45),
-                vec![GradientStop::new(0.0, Color::from_rgba8(255, 255, 255, 14)), GradientStop::new(1.0, Color::from_rgba8(255, 255, 255, 0))],
-                SpreadMode::Pad,
-                Transform::identity(),
-            ) {
-                p.shader = sh;
-                self.canvas.fill_path(&path, &p, FillRule::Winding, Transform::identity(), None);
-            }
-        }
-
-        // Floating z's while sleepy.
+        // Face + effects, clipped to the body.
+        self.face.draw(&mut self.layer, &mut self.fx, g.face.0, g.face.1, g.k);
         let zzz = self.face.zzz();
         if zzz > 0.3 {
             if let Some(tx) = self.text.as_mut() {
-                let x = sx + sw * 0.83;
-                let y = sy + shh * 0.25;
+                let x = g.face.0 + bw * 0.30;
+                let y = g.face.1 - 8.0 * s;
                 for i in 0..3 {
                     let ph = ((now / 1000.0 + i as f32 * 0.7) % 2.1) / 2.1;
                     if ph > 0.85 {
                         continue;
                     }
-                    let a = ((1.0 - ph / 0.85) * 230.0 * zzz) as u8;
-                    let px = (11.0 + 4.0 * i as f32) * s;
-                    tx.draw(&mut self.fx, "z", x + i as f32 * 10.0 * s + (ph * 6.0).sin() * 3.0 * s, y - ph * 46.0 * s, px, [140, 190, 230, a]);
+                    let a = ((1.0 - ph / 0.85) * 220.0 * zzz) as u8;
+                    let px = (10.0 + 3.0 * i as f32) * s;
+                    tx.draw(&mut self.fx, "z", x + i as f32 * 8.0 * s + (ph * 6.0).sin() * 2.0 * s, y - ph * 30.0 * s, px, [230, 232, 240, a]);
                 }
             }
         }
+        if let (Some(mut mask), Some(p)) = (Mask::new(self.w as u32, self.h as u32), &body_path) {
+            mask.fill_path(p, FillRule::Winding, true, Transform::identity());
+            self.canvas.draw_pixmap(0, 0, self.layer.as_ref(), &PixmapPaint::default(), Transform::identity(), Some(&mask));
+            self.canvas.draw_pixmap(0, 0, self.fx.as_ref(), &PixmapPaint::default(), Transform::identity(), Some(&mask));
+        }
 
-        self.canvas.draw_pixmap(0, 0, self.fx.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
-
-        self.draw_claude_badge(now, bx + bw - 16.0 * s, by + 14.0 * s);
-        self.draw_bubble(now);
+        self.draw_claude_badge(now, bx + bw - 13.0 * s, by + rh * 0.72 + 11.0 * s);
+        self.draw_bar_text(now, &g);
     }
 
     fn draw_claude_badge(&mut self, now: f32, cx: f32, cy: f32) {
@@ -977,71 +1022,39 @@ impl Pet {
         let s = self.scale;
         let waiting = st == "waiting";
         let pulse = if waiting { 0.5 + 0.5 * (now / 200.0).sin() } else { 0.0 };
-        let r = (if waiting { 7.0 + 3.0 * pulse } else { 6.0 }) * s;
+        let r = (if waiting { 6.0 + 2.5 * pulse } else { 5.5 }) * s;
         let spin = now / if waiting { 700.0 } else { 260.0 };
-        let orange = Color::from_rgba8(217, 119, 87, 255);
-        face::oval(&mut self.canvas, cx, cy, r + 4.0 * s, r + 4.0 * s, Color::from_rgba8(12, 13, 17, 230), BlendMode::SourceOver);
-        for i in 0..4 {
-            let a = i as f32 * std::f32::consts::PI / 4.0 + spin;
-            let (dx, dy) = (a.cos() * r, a.sin() * r);
-            face::line(&mut self.canvas, cx - dx, cy - dy, cx + dx, cy + dy, 2.2 * s, orange);
-        }
+        asterisk(&mut self.canvas, cx, cy, r, spin, 2.0 * s);
     }
 
-    fn draw_bubble(&mut self, now: f32) {
-        if self.bubble_a < 0.01 {
+    fn draw_bar_text(&mut self, now: f32, g: &Geo) {
+        let (rx, rw, rh) = g.bar;
+        if self.bar_lines.is_empty() || rh < 4.0 {
             return;
         }
-        let Some((x, y, w, h, lines, px)) = self.bubble_rect() else { return };
-        let b = self.bubble.as_ref().unwrap();
-        let (kind, start) = (b.kind, b.start);
         let s = self.scale;
-        let a = self.bubble_a;
-        let pop = ease_out_back(((now - start) / 260.0).min(1.0));
-        let grow = 0.85 + 0.15 * pop;
-        // Scale around the tail point.
-        let (ax, ay) = (self.w as f32 / 2.0, y + h);
-        let (x, y, w, h) = (ax + (x - ax) * grow, ay + (y - ay) * grow, w * grow, h * grow);
-
-        let (bg, fg): (Color, [u8; 3]) = match kind {
-            BubbleKind::Say => (Color::from_rgba8(250, 249, 245, 255), [24, 26, 32]),
-            BubbleKind::Claude => (Color::from_rgba8(250, 249, 245, 255), [200, 98, 66]),
-            BubbleKind::Track => (Color::from_rgba8(18, 20, 26, 238), [235, 238, 245]),
-            BubbleKind::Lyric => {
-                let c = self.face.color();
-                (Color::from_rgba8(14, 16, 22, 225), [c[0] as u8, c[1] as u8, c[2] as u8])
-            }
-        };
-        let mut bg = bg;
-        bg.apply_opacity(a);
-        let r = (12.0 * s).min(h / 2.0);
-
-        // Shadow, body, tail.
-        face::rrect(&mut self.canvas, x + 1.0 * s, y + 3.0 * s, w, h, r, Color::from_rgba8(0, 0, 0, (40.0 * a) as u8), BlendMode::SourceOver);
-        face::rrect(&mut self.canvas, x, y, w, h, r, bg, BlendMode::SourceOver);
-        let tx = self.w as f32 / 2.0 + 18.0 * s;
-        let mut pb = tiny_skia::PathBuilder::new();
-        pb.move_to(tx - 8.0 * s, y + h - 1.0);
-        pb.line_to(tx + 6.0 * s, y + h - 1.0);
-        pb.line_to(tx - 6.0 * s, y + h + 9.0 * s * grow);
-        pb.close();
-        if let Some(p) = pb.finish() {
-            let mut paint = Paint::default();
-            paint.anti_alias = true;
-            paint.set_color(bg);
-            self.canvas.fill_path(&p, &paint, FillRule::Winding, Transform::identity(), None);
+        // Text fades in once the bar has mostly grown, and out as it shrinks.
+        let full = self.bar_lines.len() as f32 * self.bar_px * 1.3 + 26.0 * s;
+        let grown = ((rh / full - 0.55) / 0.45).clamp(0.0, 1.0);
+        let a = self.bubble_a.min(grown);
+        if a < 0.02 {
+            return;
         }
+        let px = self.bar_px;
+        let lh = px * 1.3;
+        let kind = self.bar_kind;
+        let icon = if kind == BubbleKind::Say { 0.0 } else { 28.0 * s };
+        let lines = self.bar_lines.clone();
+        let Some(t) = self.text.as_mut() else { return };
+        let widest = lines.iter().map(|l| t.width(l, px)).fold(0.0, f32::max);
+        let x0 = (rx + (rw - widest - icon) / 2.0).max(rx + 20.0 * s);
+        let y0 = (rh - lines.len() as f32 * lh) / 2.0;
 
-        // Typewriter for spoken lines; lyrics/track appear whole.
         let total: usize = lines.iter().map(|l| l.chars().count()).sum();
         let shown = match kind {
-            BubbleKind::Say | BubbleKind::Claude => (((now - start) / 24.0) as usize).min(total),
+            BubbleKind::Say | BubbleKind::Claude => (((now - self.bar_start) / 22.0) as usize).min(total),
             _ => total,
         };
-        let px = px * grow;
-        let lh = px * 1.32;
-        let pad_y = 9.0 * s * grow;
-        let Some(t) = self.text.as_mut() else { return };
         let mut left = shown;
         for (i, l) in lines.iter().enumerate() {
             if left == 0 {
@@ -1050,10 +1063,27 @@ impl Pet {
             let n = l.chars().count().min(left);
             left -= n;
             let part: String = l.chars().take(n).collect();
-            let lw = t.width(l, px);
-            let lx = x + (w - lw) / 2.0;
-            let ly = y + pad_y + lh * i as f32 + px * 1.0;
-            t.draw(&mut self.canvas, &part, lx, ly, px, [fg[0], fg[1], fg[2], (255.0 * a) as u8]);
+            let lx = x0 + icon + (widest - t.width(l, px)) / 2.0;
+            let ly = y0 + lh * i as f32 + px;
+            t.draw(&mut self.canvas, &part, lx, ly, px, [255, 255, 255, (255.0 * a) as u8]);
+        }
+
+        // Icon to the left of the text.
+        let iy = rh / 2.0;
+        let ix = x0 + 9.0 * s;
+        match kind {
+            BubbleKind::Lyric | BubbleKind::Track => {
+                for i in 0..3 {
+                    let ph = now / 180.0 + i as f32 * 1.9;
+                    let hh = (4.0 + 5.0 * ph.sin().abs()) * s;
+                    let x = ix - 6.0 * s + i as f32 * 6.0 * s;
+                    let mut c = Color::from_rgba8(255, 196, 0, 255);
+                    c.apply_opacity(a);
+                    face::line(&mut self.canvas, x, iy - hh, x, iy + hh, 3.2 * s, c);
+                }
+            }
+            BubbleKind::Claude => asterisk(&mut self.canvas, ix, iy, 7.0 * s, now / 700.0, 2.2 * s),
+            BubbleKind::Say => {}
         }
     }
 }
@@ -1095,10 +1125,12 @@ fn run(feed: Arc<Mutex<Feed>>) -> Result<(), String> {
         }
 
         let prefs = Prefs::load();
+        let mut face = Face::new();
+        face.set_mono(true);
         let mut pet = Pet {
             hwnd,
             prefs: prefs.clone(),
-            face: Face::new(),
+            face,
             text: Text::load(),
             t0: Instant::now(),
             scale: 1.0,
@@ -1126,6 +1158,12 @@ fn run(feed: Arc<Mutex<Feed>>) -> Result<(), String> {
             claude_since: 0.0,
             bubble: None,
             bubble_a: 0.0,
+            bar_w: 0.0,
+            bar_h: 0.0,
+            bar_lines: Vec::new(),
+            bar_kind: BubbleKind::Say,
+            bar_start: 0.0,
+            bar_px: 16.0,
             hidden_until: None,
             fs_hidden: false,
             alpha: 0.0,
@@ -1133,17 +1171,15 @@ fn run(feed: Arc<Mutex<Feed>>) -> Result<(), String> {
             appear: 0.0,
         };
         if pet.text.is_none() {
-            crate::log("overlay: no system font found, bubbles disabled");
+            crate::log("overlay: no system font found, speech disabled");
         }
         pet.resize()?;
-        match (prefs.x, prefs.y) {
-            (Some(x), Some(y)) => {
-                // Make sure it's still on a screen (monitors change).
-                let wa = work_area_at(x + pet.w / 2, y + pet.h / 2);
-                pet.x = x.clamp(wa.left - pet.w / 3, wa.right - pet.w * 2 / 3);
-                pet.y = y.clamp(wa.top - pet.h / 3, wa.bottom - pet.h / 2);
+        match prefs.x {
+            Some(x) => {
+                pet.x = x;
+                pet.snap_top(prefs.y.unwrap_or(0) + 4);
             }
-            _ => pet.place_default(),
+            None => pet.place_default(),
         }
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         crate::log("overlay up");

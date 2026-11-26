@@ -2,7 +2,7 @@
 
 Bell is a little robot face that lives in two places:
 
-- **On your desktop.** A small floating window that stays on top of everything. It has animated eyes, speech bubbles, sings along to Spotify, and shows a badge while Claude Code is working. It's a native Rust app with no Electron, idles at about 50 MB, and draws in sync with the compositor so the animation stays smooth.
+- **On your desktop.** A black notch docked to the top-centre of your screen that stays on top of everything. When it talks, a bar grows out of the top with the text. It has animated eyes, speech bubbles, sings along to Spotify, and shows a badge while Claude Code is working. It's a native Rust app with no Electron, idles at about 50 MB, and draws in sync with the compositor so the animation stays smooth.
 - **On your desk.** An ESP32 with a 2.8" ILI9341 screen running the same face, updated over WiFi.
 
 The desktop app also runs the robot's companion: it watches what you're doing (focused app, Spotify via the Windows media session, idle time) and streams that to the robot. It also serves an everyday planner at `http://localhost:7777`.
@@ -25,15 +25,15 @@ target\release\bell.exe --no-overlay # robot only, no desktop pet
 
 | Do this | Bell does |
 |---|---|
-| Drag | moves it (position is remembered) |
+| Drag | slides it along the top edge, or onto another monitor (remembered) |
 | Click | gets petted (hearts / happy / excited) |
-| Click a bubble | dismisses it |
+| Click the text bar | dismisses it |
 | Double-click | opens the planner app |
-| Right-click | menu: size, lyrics, eyes-follow-mouse, move to corner, hide 30 min, quit |
+| Right-click | menu: size, lyrics, eyes-follow-mouse, centre on screen, hide 30 min, quit |
 
 - The eyes follow your mouse, blink, glance around, and play small idle animations (look around, curious, wiggle, peek, yawn).
 - The mood follows what you're doing: focus while coding, music, sleepy when you're away, sus after 20 min of YouTube, and so on.
-- Hype lines, reminders and habit nudges appear as speech bubbles with a typewriter effect.
+- Hype lines, reminders and habit nudges type out in the top bar.
 - With Spotify playing, it lip-syncs to synced lyrics (LRCLIB) with floating notes, shows the lyric line, and hums when a song has no lyrics.
 - With Claude Code hooks set up, an orange spinner shows while Claude works and "Claude needs you" appears when it's waiting.
 - It fades out when a fullscreen app (game, video) is in front.
