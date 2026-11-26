@@ -1,0 +1,5 @@
+companion/target/
+firmware/.pio/
+firmware/.vscode/
+*.log
+.playwright-mcp/

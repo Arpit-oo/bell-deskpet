@@ -1,0 +1,253 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>deskpet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07090c;--card:#0d1217;--card2:#111820;--line:#1a222b;--txt:#eaf3f9;--dim:#7f8d99;--mute:#6f7c88;
+--acc:#7fe6ff;--acc2:#ffd65a;--ok:#78f0a8;--warn:#ff8a65;--r:18px}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--txt);font-family:"Plus Jakarta Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(1000px 520px at 85% -15%,rgba(127,230,255,.10),transparent 60%),radial-gradient(800px 480px at -10% 110%,rgba(255,214,90,.07),transparent 60%),var(--bg);min-height:100vh}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+nav{border-right:1px solid var(--line);padding:26px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;letter-spacing:-.02em;margin:0 8px 22px}
+.eyes{display:flex;gap:5px}.eyes i{width:12px;height:16px;border-radius:5px;background:var(--acc);display:block;animation:bl 4.5s infinite}
+@keyframes bl{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+nav a{color:var(--dim);text-decoration:none;padding:10px 12px;border-radius:12px;font-weight:500;cursor:pointer;display:flex;gap:10px;align-items:center}
+nav a:hover{color:var(--txt);background:var(--card)}nav a.on{color:var(--txt);background:var(--card2);box-shadow:inset 0 0 0 1px var(--line)}
+nav .foot{margin-top:auto;font-size:12px;color:var(--mute);padding:0 12px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--mute)}.dot.on{background:var(--ok)}
+main{padding:34px 40px 80px;max-width:1180px;width:100%}
+h1{font-size:34px;letter-spacing:-.03em;margin:0;font-weight:800}
+.sub{color:var(--dim);font-size:14px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:26px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+.card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.c12{grid-column:span 12}.c8{grid-column:span 8}.c7{grid-column:span 7}.c6{grid-column:span 6}.c5{grid-column:span 5}.c4{grid-column:span 4}
+@media(max-width:980px){.shell{grid-template-columns:1fr}nav{position:static;height:auto;flex-direction:row;flex-wrap:wrap}.c8,.c7,.c6,.c5,.c4{grid-column:span 12}main{padding:22px}}
+.card h2{margin:0 0 14px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.now{display:flex;flex-direction:column;gap:12px}
+.now .title{font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.tip{color:var(--acc2);font-size:15px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}.pill{font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);color:var(--dim);background:#0a0f14}
+.pill.hi{color:var(--warn);border-color:#3a2420}.pill.hard{color:var(--acc);border-color:#1b3340}
+button{font:inherit;font-size:14px;color:var(--txt);background:#121a22;border:1px solid var(--line);border-radius:12px;padding:10px 14px;cursor:pointer;transition:.15s}
+button:hover{border-color:var(--acc);color:var(--acc)}button.pri{background:var(--acc);color:#03131b;border-color:var(--acc);font-weight:700}
+button.pri:hover{filter:brightness(1.08);color:#03131b}button.ghost{background:transparent}button.sm{padding:6px 10px;font-size:12px;border-radius:9px}
+input,select{font:inherit;color:var(--txt);background:#0a0f14;border:1px solid var(--line);border-radius:12px;padding:11px 13px;width:100%;outline:none}
+input:focus,select:focus{border-color:var(--acc)}
+.row{display:flex;gap:10px;align-items:center}.row>.grow{flex:1}
+.list{display:flex;flex-direction:column}
+.item{display:flex;align-items:center;gap:12px;padding:12px 4px;border-top:1px solid var(--line)}.item:first-child{border-top:0}
+.item .t{flex:1;min-width:0}.item .t b{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .t span{color:var(--dim);font-size:12px}
+.check{width:22px;height:22px;border-radius:7px;border:2px solid var(--mute);cursor:pointer;flex:0 0 auto;display:grid;place-items:center;transition:.15s}
+.check:hover{border-color:var(--ok)}.check.on{background:var(--ok);border-color:var(--ok)}.check.on:after{content:"";width:6px;height:10px;border:solid #052;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.later .t b{color:var(--dim)}
+.x{opacity:0;color:var(--mute);cursor:pointer;padding:4px 6px}.item:hover .x{opacity:1}.x:hover{color:var(--warn)}
+.big{font-size:44px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.bars{display:flex;flex-direction:column;gap:10px}.bar{display:grid;grid-template-columns:90px 1fr 70px;gap:10px;align-items:center;font-size:13px}
+.bar .tr{height:8px;border-radius:9px;background:#0a0f14;overflow:hidden}.bar .tr i{display:block;height:100%;border-radius:9px}
+.hours{display:flex;gap:3px;align-items:flex-end;height:70px;margin-top:8px}.hours i{flex:1;background:var(--acc);border-radius:3px 3px 0 0;opacity:.85;min-height:2px}
+.hours i.best{background:var(--acc2)}
+.flame{color:var(--acc2);font-weight:700;font-size:13px}
+.seg{display:flex;background:#0a0f14;border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:8px}.seg button.on{background:#1c2630;color:var(--acc)}
+.tog{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line)}.tog:first-of-type{border-top:0}
+.switch{width:44px;height:26px;border-radius:99px;background:#1b252e;position:relative;cursor:pointer;transition:.2s;flex:0 0 auto}
+.switch:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#cfd8df;transition:.2s}
+.switch.on{background:var(--acc)}.switch.on:after{left:21px;background:#03131b}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a0f14;border:1px solid var(--line);cursor:pointer}
+.chip:hover{border-color:var(--warn);color:var(--warn)}
+.empty{color:var(--mute);font-size:14px;padding:10px 0}
+.focusring{display:flex;align-items:center;gap:18px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(90px);background:#101820;border:1px solid var(--line);padding:11px 16px;border-radius:12px;transition:.25s;font-size:14px;z-index:9}
+.toast.show{transform:translateX(-50%)}
+.page{display:none}.page.on{display:block}
+.hint{color:var(--mute);font-size:12px;margin-top:8px}
+</style></head><body>
+<div class="shell">
+<nav>
+  <div class="logo"><div class="eyes"><i></i><i></i></div>deskpet</div>
+  <a data-p="today" class="on">Today</a>
+  <a data-p="tasks">Tasks</a>
+  <a data-p="remind">Reminders</a>
+  <a data-p="habits">Habits</a>
+  <a data-p="focus">Focus</a>
+  <a data-p="stats">Stats</a>
+  <a data-p="pet">Pet</a>
+  <a data-p="settings">Settings</a>
+  <div class="foot"><span class="dot" id="petdot"></span> <span id="petst">pet offline</span></div>
+</nav>
+<main>
+
+<!-- TODAY -->
+<section class="page on" id="p-today">
+  <div class="top"><div><h1 id="hello">Hey</h1><div class="sub" id="datel"></div></div>
+    <div class="pills" id="livepills"></div></div>
+  <div class="grid">
+    <div class="card c8"><h2>Right now <span class="sub" id="window"></span></h2>
+      <div class="now" id="nowbox"></div></div>
+    <div class="card c4"><h2>Your day</h2>
+      <div class="big" id="freebig">-</div><div class="sub">free until end of day</div>
+      <div style="margin-top:16px" id="nextev" class="sub"></div>
+      <div style="margin-top:16px" class="sub" id="besthrs"></div></div>
+    <div class="card c12"><div class="row"><input class="grow" id="qadd" placeholder="Add a task... e.g. Finish lab report 40m ! tomorrow #hard"><button class="pri" onclick="quick()">Add</button></div>
+      <div class="hint">40m / 2h = time &middot; ! = important &middot; today / tomorrow = due &middot; #hard = needs deep focus</div></div>
+    <div class="card c6"><h2>Fits today</h2><div class="list" id="todayl"></div></div>
+    <div class="card c6"><h2>Won't fit today</h2><div class="list later" id="laterl"></div></div>
+    <div class="card c6"><h2>Habits</h2><div class="list" id="habl2"></div></div>
+    <div class="card c6"><h2>Up next</h2><div class="list" id="reml2"></div></div>
+  </div>
+</section>
+
+<!-- TASKS -->
+<section class="page" id="p-tasks">
+  <div class="top"><div><h1>Tasks</h1><div class="sub">everything on your plate</div></div>
+    <button class="ghost" onclick="api('POST','/api/tasks-clear-done')">Clear done</button></div>
+  <div class="grid">
+    <div class="card c12"><div class="row"><input class="grow" id="qadd2" placeholder="Add a task... 40m ! tomorrow #hard"><button class="pri" onclick="quick('qadd2')">Add</button></div></div>
+    <div class="card c12"><div class="list" id="alltasks"></div></div>
+  </div>
+</section>
+
+<!-- REMINDERS -->
+<section class="page" id="p-remind">
+  <div class="top"><div><h1>Reminders</h1><div class="sub">the pet rings, the laptop chimes</div></div></div>
+  <div class="grid">
+    <div class="card c12"><div class="row" style="flex-wrap:wrap">
+      <input class="grow" id="rtext" placeholder="Drink water" style="min-width:200px">
+      <select id="rkind" style="width:140px" onchange="rk()"><option value="daily">every day at</option><option value="once">today at</option><option value="every">every N min</option></select>
+      <input id="rtime" type="time" style="width:130px"><input id="revery" type="number" min="5" value="60" style="width:100px;display:none">
+      <button class="pri" onclick="addRem()">Add</button></div></div>
+    <div class="card c12"><div class="list" id="reml"></div></div>
+  </div>
+</section>
+
+<!-- HABITS -->
+<section class="page" id="p-habits">
+  <div class="top"><div><h1>Habits</h1><div class="sub">tick daily, keep the streak</div></div></div>
+  <div class="grid">
+    <div class="card c12"><div class="row"><input class="grow" id="hname" placeholder="Gym, read 20 pages, LeetCode 1/day..."><input id="htime" type="time" style="width:130px" title="nudge time (optional)"><button class="pri" onclick="addHabit()">Add</button></div></div>
+    <div class="card c12"><div class="list" id="habl"></div></div>
+  </div>
+</section>
+
+<!-- FOCUS -->
+<section class="page" id="p-focus">
+  <div class="top"><div><h1>Focus</h1><div class="sub">distractions get minimised while it's on</div></div></div>
+  <div class="grid">
+    <div class="card c6"><h2>Focus mode</h2><div class="big" id="focusleft">off</div>
+      <div class="row" style="margin-top:16px"><button onclick="focus(25)">25 min</button><button onclick="focus(50)">50 min</button><button onclick="focus(90)">90 min</button><button class="ghost" onclick="focus(0)">Stop</button></div>
+      <div class="hint">Pomodoro on the pet turns this on automatically.</div></div>
+    <div class="card c6"><h2>Blocked while focusing</h2><div class="chips" id="blocks"></div>
+      <div class="row" style="margin-top:14px"><input class="grow" id="newblock" placeholder="add keyword (e.g. twitch)"><button onclick="addBlock()">Add</button></div>
+      <div class="tog" style="margin-top:8px"><span>Auto-minimise distractions</span><div class="switch" data-pref="auto_minimize"></div></div></div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="page" id="p-stats">
+  <div class="top"><div><h1>Today's time</h1><div class="sub">where your hours actually went</div></div></div>
+  <div class="grid">
+    <div class="card c7"><h2>By activity</h2><div class="bars" id="catbars"></div></div>
+    <div class="card c5"><h2>Coding by hour</h2><div class="hours" id="hours"></div><div class="hint" id="hourhint"></div>
+      <div style="margin-top:18px" class="sub">Tasks done today</div><div class="big" id="donecount">0</div></div>
+  </div>
+</section>
+
+<!-- PET -->
+<section class="page" id="p-pet">
+  <div class="top"><div><h1>Pet</h1><div class="sub" id="petinfo">-</div></div>
+    <a href="#" id="petlink" target="_blank" style="color:var(--acc)">open pet settings &rarr;</a></div>
+  <div class="grid">
+    <div class="card c6"><h2>Pomodoro on the pet</h2><div class="row"><button class="pri" onclick="pet('/api/pomodoro',{action:'start'})">Start</button><button onclick="pet('/api/pomodoro',{action:'skip'})">Skip</button><button onclick="pet('/api/pomodoro',{action:'stop'})">Stop</button></div></div>
+    <div class="card c6"><h2>Say something</h2><div class="row"><input class="grow" id="psay" placeholder="LET'S GOOO"><button class="pri" onclick="petSay()">Send</button></div></div>
+    <div class="card c12"><h2>Mood</h2><div class="row" style="flex-wrap:wrap" id="moods"></div></div>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section class="page" id="p-settings">
+  <div class="top"><div><h1>Settings</h1></div></div>
+  <div class="grid">
+    <div class="card c6"><h2>You</h2>
+      <div class="sub">Name</div><input id="sname" onchange="pref({name:this.value})" style="margin:6px 0 14px">
+      <div class="row"><div class="grow"><div class="sub">Day starts</div><input type="time" id="sstart" onchange="pref({day_start:this.value})"></div>
+      <div class="grow"><div class="sub">Day ends</div><input type="time" id="send" onchange="pref({day_end:this.value})"></div></div></div>
+    <div class="card c6"><h2>Personality</h2><div class="seg" id="persona"></div>
+      <div class="tog" style="margin-top:10px"><span>Laptop sounds</span><div class="switch" data-pref="sounds"></div></div>
+      <div class="tog"><span>Speak lines out loud</span><div class="switch" data-pref="voice"></div></div>
+      <button class="sm" onclick="api('POST','/api/test-sound')">test sound</button></div>
+  </div>
+</section>
+
+</main></div>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);let S=null;
+const PERS={hype:"Hype",bro:"Bro",coach:"Coach",butler:"Butler",chill:"Chill",kawaii:"Kawaii"};
+const CATC={code:"#7fe6ff",video:"#ff5a46",social:"#ff69b4",chat:"#a99cff",music:"#6ef0a0",game:"#ffa520",browse:"#5aaeff",other:"#7f8d99"};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const dur=m=>m<60?m+"m":Math.floor(m/60)+"h "+String(m%60).padStart(2,"0")+"m";
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),1600)}
+async function api(m,u,b){const r=await fetch(u,{method:m,headers:{"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined});const j=await r.json();if(j.ok===false){toast(j.err||"error");return}S=j;render();return j}
+async function pet(u,b){const r=await fetch("/pet"+u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});const j=await r.json();toast(j.ok===false?(j.err||"pet offline"):"sent")}
+function petSay(){const v=$("#psay").value.trim();if(v){pet("/api/say",{text:v,mood:"excited",ms:7000});$("#psay").value=""}}
+function quick(id="qadd"){const el=$("#"+id),v=el.value.trim();if(!v)return;api("POST","/api/tasks",{quick:v}).then(()=>{el.value="";toast("added")})}
+["qadd","qadd2"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{if(e.key==="Enter")quick(id)}));
+function done(id,d){api("POST","/api/tasks/"+id,{done:d})}
+function del(kind,id){api("DELETE",`/api/${kind}/${id}`)}
+function tomorrow(id){const d=new Date(Date.now()+864e5);api("POST","/api/tasks/"+id,{due:d.toISOString().slice(0,10)})}
+function rk(){const k=$("#rkind").value;$("#rtime").style.display=k==="every"?"none":"";$("#revery").style.display=k==="every"?"":"none"}
+function addRem(){const t=$("#rtext").value.trim();if(!t)return;const k=$("#rkind").value;api("POST","/api/reminders",{text:t,kind:k,time:$("#rtime").value||null,every_min:+$("#revery").value}).then(j=>{if(j){$("#rtext").value="";toast("reminder set")}})}
+function addHabit(){const n=$("#hname").value.trim();if(!n)return;api("POST","/api/habits",{name:n,time:$("#htime").value||null}).then(()=>{$("#hname").value=""})}
+function focus(m){api("POST","/api/focus",{minutes:m}).then(()=>toast(m?`focus ${m} min`:"focus off"))}
+function pref(p){api("POST","/api/prefs",p).then(()=>toast("saved"))}
+function addBlock(){const v=$("#newblock").value.trim().toLowerCase();if(!v)return;pref({focus_block:[...S.prefs.focus_block,v]});$("#newblock").value=""}
+document.querySelectorAll("nav a[data-p]").forEach(a=>a.onclick=()=>{document.querySelectorAll("nav a").forEach(x=>x.classList.toggle("on",x===a));document.querySelectorAll(".page").forEach(p=>p.classList.toggle("on",p.id==="p-"+a.dataset.p))});
+document.querySelectorAll(".switch[data-pref]").forEach(s=>s.onclick=()=>pref({[s.dataset.pref]:!S.prefs[s.dataset.pref]}));
+Object.entries(PERS).forEach(([k,v])=>{const b=document.createElement("button");b.textContent=v;b.dataset.k=k;b.onclick=()=>pref({personality:k});$("#persona").appendChild(b)});
+["happy","excited","love","sus","sleepy","surprised","focus","angry","sad"].forEach(m=>{const b=document.createElement("button");b.textContent=m;b.onclick=()=>pet("/api/mood",{mood:m,ms:6000});$("#moods").appendChild(b)});
+function taskRow(t,opts={}){const meta=[dur(t.est_min)];if(t.due)meta.push(t.due===S.today?"today":"due "+t.due);
+return `<div class="item"><div class="check ${t.done?"on":""}" onclick="done(${t.id},${!t.done})"></div><div class="t"><b>${esc(t.title)}</b><span>${meta.join(" &middot; ")}</span></div>
+${t.priority==2?'<span class="pill hi">important</span>':""}${t.hard?'<span class="pill hard">deep</span>':""}
+${opts.tmrw?`<button class="sm ghost" onclick="tomorrow(${t.id})">&rarr; tomorrow</button>`:""}<span class="x" onclick="del('tasks',${t.id})">&#10005;</span></div>`}
+function remRow(r){const when=r.kind==="every"?`every ${r.every_min} min`:r.kind==="daily"?`daily ${r.time}`:`${r.date} ${r.time}`;
+return `<div class="item"><div class="t"><b>${esc(r.text)}</b><span>${when}</span></div><div class="switch ${r.enabled?"on":""}" onclick="api('POST','/api/reminders/${r.id}',{enabled:${!r.enabled}})"></div><span class="x" onclick="del('reminders',${r.id})">&#10005;</span></div>`}
+function habRow(h){return `<div class="item"><div class="check ${h.done_today?"on":""}" onclick="api('POST','/api/habits/${h.id}/check')"></div><div class="t"><b>${esc(h.name)}</b><span>${h.time?"nudge at "+h.time:"no nudge"}</span></div><span class="flame">${h.streak?"&#128293; "+h.streak:""}</span><span class="x" onclick="del('habits',${h.id})">&#10005;</span></div>`}
+function render(){if(!S)return;const p=S.plan,L=S.live,P=S.prefs;
+const h=S.hour,greet=h<5?"Up late":h<12?"Good morning":h<17?"Good afternoon":"Good evening";
+$("#hello").textContent=`${greet}, ${P.name}`;$("#datel").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"});
+const pills=[];if(L.label)pills.push(`<span class="pill">${esc(L.label)} &middot; ${L.minutes}m</span>`);if(L.playing)pills.push(`<span class="pill">&#9835; ${esc(L.track)}</span>`);if(L.focus_left_s>0)pills.push(`<span class="pill hard">focus ${Math.ceil(L.focus_left_s/60)}m</span>`);
+$("#livepills").innerHTML=pills.join("");
+$("#petdot").classList.toggle("on",L.pet_online);$("#petst").textContent=L.pet_online?"pet online":"pet offline";
+$("#window").textContent=p.window_min<p.free_min?`${dur(p.window_min)} until ${p.next_event?p.next_event[0]:""}`:"";
+$("#nowbox").innerHTML=p.now?`<div class="title">${esc(p.now.title)}</div><div class="tip">${esc(p.tip)}</div>
+<div class="row"><button class="pri" onclick="done(${p.now.id},true)">Done</button><button onclick="focus(${Math.min(p.now.est_min,90)})">Focus ${dur(Math.min(p.now.est_min,90))}</button><button class="ghost" onclick="tomorrow(${p.now.id})">Not today</button></div>`
+:`<div class="title" style="color:var(--dim)">Nothing planned</div><div class="tip">${esc(p.tip)}</div>`;
+$("#freebig").textContent=dur(p.free_min);
+$("#nextev").innerHTML=p.next_event?`Next: <b style="color:var(--txt)">${esc(p.next_event[1])}</b> at ${p.next_event[0]}`:"No timed reminders left today";
+$("#besthrs").textContent=p.best_hours.length?`Your best focus hours: ${p.best_hours.map(x=>x+":00").join(", ")}`:"Best focus hours appear after a few days of use.";
+$("#todayl").innerHTML=p.today.map(t=>taskRow(t)).join("")||'<div class="empty">Nothing else - nice.</div>';
+$("#laterl").innerHTML=p.later.map(t=>taskRow(t,{tmrw:!t.due||t.due<=S.today})).join("")||'<div class="empty">Everything fits today.</div>';
+const open=S.tasks.filter(t=>!t.done),closed=S.tasks.filter(t=>t.done);
+$("#alltasks").innerHTML=[...open,...closed].map(t=>taskRow(t)).join("")||'<div class="empty">No tasks yet.</div>';
+$("#reml").innerHTML=S.reminders.map(remRow).join("")||'<div class="empty">No reminders.</div>';
+$("#reml2").innerHTML=S.reminders.filter(r=>r.enabled).slice(0,5).map(remRow).join("")||'<div class="empty">No reminders. Add "drink water every 60 min".</div>';
+$("#habl").innerHTML=S.habits.map(habRow).join("")||'<div class="empty">No habits yet.</div>';
+$("#habl2").innerHTML=S.habits.map(habRow).join("")||'<div class="empty">No habits yet.</div>';
+$("#focusleft").textContent=L.focus_left_s>0?`${String(Math.floor(L.focus_left_s/60)).padStart(2,"0")}:${String(L.focus_left_s%60).padStart(2,"0")}`:"off";
+$("#blocks").innerHTML=P.focus_block.map(b=>`<span class="chip" title="remove" onclick="pref({focus_block:S.prefs.focus_block.filter(x=>x!=='${esc(b)}')})">${esc(b)} &#10005;</span>`).join("");
+const pc=S.stats.per_cat||{},tot=Math.max(1,...Object.values(pc));
+$("#catbars").innerHTML=Object.entries(pc).sort((a,b)=>b[1]-a[1]).map(([c,s])=>`<div class="bar"><span>${c}</span><div class="tr"><i style="width:${s/tot*100}%;background:${CATC[c]||"#7f8d99"}"></i></div><span class="sub">${dur(Math.round(s/60))}</span></div>`).join("")||'<div class="empty">Tracking starts now.</div>';
+const hb=S.stats.code_by_hour||[],hm=Math.max(1,...hb);$("#hours").innerHTML=hb.map((v,i)=>`<i class="${p.best_hours.includes(i)?"best":""}" title="${i}:00 - ${Math.round(v/60)}m" style="height:${v/hm*100}%"></i>`).join("");
+$("#hourhint").textContent="00:00 → 23:00 · gold = your best hours";$("#donecount").textContent=S.stats.tasks_done||0;
+$("#petinfo").textContent=L.pet_online?"connected":"offline - is the hotspot on?";
+document.querySelectorAll(".switch[data-pref]").forEach(s=>s.classList.toggle("on",!!P[s.dataset.pref]));
+document.querySelectorAll("#persona button").forEach(b=>b.classList.toggle("on",b.dataset.k===P.personality));
+if(document.activeElement!==$("#sname"))$("#sname").value=P.name;$("#sstart").value=P.day_start;$("#send").value=P.day_end}
+fetch("/pet/api/settings").then(r=>r.json()).catch(()=>null);
+$("#petlink").href="/pet/";$("#petlink").onclick=e=>{e.preventDefault();window.open("http://192.168.137.243/","_blank")};
+async function poll(){try{S=await (await fetch("/api/state")).json();render()}catch(e){}}poll();setInterval(poll,2000);
+</script></body></html>
