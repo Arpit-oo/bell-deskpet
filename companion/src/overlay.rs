@@ -120,11 +120,14 @@ struct Prefs {
     size: usize,
     lyrics: bool,
     follow_mouse: bool,
+    /// Stay tucked into the top edge; drop down only when there's a message.
+    #[serde(default)]
+    quiet: bool,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { x: None, y: None, size: 1, lyrics: true, follow_mouse: true }
+        Prefs { x: None, y: None, size: 1, lyrics: true, follow_mouse: true, quiet: false }
     }
 }
 
@@ -609,8 +612,9 @@ impl Pet {
         let base_h = NOTCH_H * s * pop;
         let join = self.bar_h * 0.72;
         let bh = base_h + join;
-        // Drop in from the top edge on start.
-        let by = -(1.0 - ease_out_back(self.appear)) * bh;
+        // Drop in from the top edge; when tucked away a thin lip stays visible.
+        let lip = 5.0 * s;
+        let by = -(1.0 - ease_out_back(self.appear)) * (bh - lip);
         Geo {
             body: (cx - bw / 2.0, by, bw, bh),
             bar: (cx - self.bar_w / 2.0, self.bar_w, self.bar_h),
@@ -724,6 +728,7 @@ impl Pet {
         const QUIT: usize = 5;
         const SIZE0: usize = 10;
         const RESET: usize = 20;
+        const QUIET: usize = 21;
         unsafe {
             let m = CreatePopupMenu();
             let sub = CreatePopupMenu();
@@ -733,6 +738,7 @@ impl Pet {
             }
             AppendMenuW(m, MF_STRING, OPEN, wide("Open Bell app").as_ptr());
             AppendMenuW(m, MF_SEPARATOR, 0, std::ptr::null());
+            AppendMenuW(m, MF_STRING | if self.prefs.quiet { MF_CHECKED } else { 0 }, QUIET, wide("Pop up only for messages").as_ptr());
             AppendMenuW(m, MF_STRING | MF_POPUP, sub as usize, wide("Size").as_ptr());
             AppendMenuW(m, MF_STRING | if self.prefs.lyrics { MF_CHECKED } else { 0 }, LYRICS, wide("Show lyrics").as_ptr());
             AppendMenuW(m, MF_STRING | if self.prefs.follow_mouse { MF_CHECKED } else { 0 }, FOLLOW, wide("Eyes follow mouse").as_ptr());
@@ -747,6 +753,7 @@ impl Pet {
             match cmd {
                 OPEN => open_app(),
                 LYRICS => self.prefs.lyrics = !self.prefs.lyrics,
+                QUIET => self.prefs.quiet = !self.prefs.quiet,
                 FOLLOW => self.prefs.follow_mouse = !self.prefs.follow_mouse,
                 HIDE => self.hidden_until = Some(Instant::now() + Duration::from_secs(30 * 60)),
                 RESET => {
@@ -859,7 +866,8 @@ impl Pet {
     /// Grow/shrink the talking bar toward the current bubble's size.
     fn update_bar(&mut self, now: f32, dt: f32) {
         let s = self.scale;
-        let on = self.bubble.as_ref().is_some_and(|b| now <= b.until);
+        let quiet_skip = self.prefs.quiet && self.bubble.as_ref().is_some_and(|b| matches!(b.kind, BubbleKind::Lyric | BubbleKind::Track));
+        let on = !quiet_skip && self.bubble.as_ref().is_some_and(|b| now <= b.until);
         if !on && self.bar_h < 1.0 {
             self.bubble = None;
         }
@@ -911,7 +919,10 @@ impl Pet {
         let hovering = self.hit(c.0, c.1) || self.pressed.is_some();
         self.hover = approach(self.hover, if hovering { 1.0 } else { 0.0 }, dt, 90.0);
         self.squash = approach(self.squash, if self.pressed.is_some() && !self.dragging { 0.6 } else { 0.0 }, dt, 70.0);
-        self.appear = (self.appear + dt / 550.0).min(1.0);
+        // Quiet mode: tucked away unless talking (Claude / pet lines) or hovered.
+        let talking = self.bubble.as_ref().is_some_and(|b| now <= b.until && matches!(b.kind, BubbleKind::Say | BubbleKind::Claude));
+        let show = !self.prefs.quiet || talking || hovering || self.claude == "waiting";
+        self.appear = if show { (self.appear + dt / 550.0).min(1.0) } else { (self.appear - dt / 320.0).max(0.0) };
 
         let g = self.geo();
         let fcx = self.x as f32 + g.face.0;

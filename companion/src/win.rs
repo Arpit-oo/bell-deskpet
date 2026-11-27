@@ -62,11 +62,13 @@ pub fn exe_for_pid(pid: u32) -> Option<String> {
 pub struct ExeCache {
     map: HashMap<u32, Option<String>>,
     cleared: Instant,
+    /// Last foreground window that wasn't Bell itself.
+    last_other: Option<(String, String)>,
 }
 
 impl ExeCache {
     pub fn new() -> Self {
-        Self { map: HashMap::new(), cleared: Instant::now() }
+        Self { map: HashMap::new(), cleared: Instant::now(), last_other: None }
     }
 
     pub fn get(&mut self, pid: u32) -> Option<String> {
@@ -84,8 +86,15 @@ pub fn foreground(cache: &mut ExeCache) -> Option<(String, String)> {
     if hwnd.is_null() {
         return None;
     }
-    let exe = cache.get(window_pid(hwnd))?;
-    Some((exe, window_title(hwnd)))
+    let pid = window_pid(hwnd);
+    // Clicking the desktop pet focuses Bell; that's not "what you're doing".
+    if pid == std::process::id() {
+        return cache.last_other.clone();
+    }
+    let exe = cache.get(pid)?;
+    let r = (exe, window_title(hwnd));
+    cache.last_other = Some(r.clone());
+    Some(r)
 }
 
 /// Titles of all top-level windows (including hidden ones) owned by `exe_name`.
