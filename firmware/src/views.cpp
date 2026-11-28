@@ -171,3 +171,81 @@ void drawFocusView(TFT_eSprite &s, const Brain &brain, uint32_t now) {
   const float frac = active ? 1.0f - static_cast<float>(remain) / max<uint32_t>(1, brain.pomoTotalMs()) : 0.0f;
   dotBar(s, 18, 128, W - 36, 6, frac, ph == PomoPhase::Break ? kDotLow : COL_MONO);
 }
+
+// ---------------------------------------------------------------- life in weeks
+
+namespace {
+// Grid: one column per year, 52 rows of weeks. Decade gap every 10 years.
+constexpr int kLifeX = 17, kLifeY = 42, kColW = 3, kRowH = 3, kGap = 2;
+int g_curYear = -1, g_curWeek = -1;
+
+int lifeColX(int year) { return kLifeX + year * kColW + (year / 10) * kGap; }
+
+long daysFromCivil(int y, unsigned m, unsigned d) {  // Howard Hinnant's algorithm
+  y -= m <= 2;
+  const long era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = static_cast<unsigned>(y - era * 400);
+  const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + static_cast<long>(doe) - 719468;
+}
+}  // namespace
+
+bool drawLifeFull(TFT_eSPI &tft) {
+  tft.fillScreen(TFT_BLACK);
+  struct tm t;
+  if (!getLocalTime(&t, 0)) {
+    g_curYear = -1;
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(COL_SUBTLE, TFT_BLACK);
+    tft.drawString("waiting for time...", 160, 120, 2);
+    return false;
+  }
+  const long today = daysFromCivil(t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+  const long born = daysFromCivil(BIRTH_Y, BIRTH_M, BIRTH_D);
+  const long lived = max(0L, (today - born) / 7);
+
+  // Age in years + week inside the current year of life.
+  int age = t.tm_year + 1900 - BIRTH_Y;
+  if (t.tm_mon + 1 < BIRTH_M || (t.tm_mon + 1 == BIRTH_M && t.tm_mday < BIRTH_D)) age--;
+  const long lastBday = daysFromCivil(BIRTH_Y + age, BIRTH_M, BIRTH_D);
+  g_curYear = constrain(age, 0, LIFE_YEARS - 1);
+  g_curWeek = constrain(static_cast<int>((today - lastBday) / 7), 0, 51);
+
+  for (int y = 0; y < LIFE_YEARS; y++) {
+    const int x = lifeColX(y);
+    for (int w = 0; w < 52; w++) {
+      const bool past = y < g_curYear || (y == g_curYear && w < g_curWeek);
+      tft.fillRect(x, kLifeY + w * kRowH, 2, 2, past ? COL_MONO : 0x2104);
+    }
+  }
+
+  // Header + footer in LED dot text, drawn via a small sprite-free path.
+  TFT_eSprite hdr(&tft);
+  hdr.setColorDepth(8);
+  if (hdr.createSprite(SCREEN_W, 20)) {
+    hdr.fillSprite(TFT_BLACK);
+    dotText(hdr, "LIFE IN WEEKS", kLifeX, 4, 2, COL_MONO, TFT_BLACK);
+    char buf[24];
+    snprintf(buf, sizeof(buf), "AGE %d", age);
+    dotText(hdr, buf, SCREEN_W - kLifeX - dotTextWidth(buf, 2), 4, 2, 0x8410, TFT_BLACK);
+    hdr.pushSprite(0, 12);
+
+    hdr.fillSprite(TFT_BLACK);
+    const long total = LIFE_YEARS * 52L;
+    snprintf(buf, sizeof(buf), "%ld LIVED", lived);
+    dotText(hdr, buf, kLifeX, 6, 2, COL_MONO, TFT_BLACK);
+    snprintf(buf, sizeof(buf), "%ld LEFT", max(0L, total - lived));
+    dotText(hdr, buf, SCREEN_W - kLifeX - dotTextWidth(buf, 2), 6, 2, 0x8410, TFT_BLACK);
+    hdr.pushSprite(0, SCREEN_H - 34);
+    hdr.deleteSprite();
+  }
+  return true;
+}
+
+void tickLife(TFT_eSPI &tft, uint32_t now) {
+  if (g_curYear < 0) return;
+  const bool on = (now / 450) % 2 == 0;
+  tft.fillRect(lifeColX(g_curYear) - 1, kLifeY + g_curWeek * kRowH - 1, 4, 4, on ? COL_MONO : TFT_BLACK);
+  if (!on) tft.fillRect(lifeColX(g_curYear), kLifeY + g_curWeek * kRowH, 2, 2, 0x4208);
+}

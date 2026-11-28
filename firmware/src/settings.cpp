@@ -66,6 +66,7 @@ void Settings::load(Preferences &p) {
   name = p.getString("name", PET_DEFAULT_NAME);
   pomoFocus = constrain(p.getUChar("pfocus", 25), 1, 90);
   pomoBreak = constrain(p.getUChar("pbreak", 5), 1, 30);
+  fullscreen = p.getBool("full", false);
   if (!themeColors(theme, eyeColor, accent)) {
     eyeColor = p.getUShort("eye", COL_EYE_ICE);
     accent = p.getUShort("accent", COL_SAY);
@@ -86,6 +87,7 @@ void Settings::save(Preferences &p) const {
   p.putString("name", name);
   p.putUChar("pfocus", pomoFocus);
   p.putUChar("pbreak", pomoBreak);
+  p.putBool("full", fullscreen);
 }
 
 String Settings::toJson() const {
@@ -102,6 +104,7 @@ String Settings::toJson() const {
   d["name"] = name;
   d["pomo_focus"] = pomoFocus;
   d["pomo_break"] = pomoBreak;
+  d["fullscreen"] = fullscreen;
   String out;
   serializeJson(d, out);
   return out;
@@ -147,5 +150,6 @@ bool Settings::apply(JsonVariantConst j) {
   }
   if (j["pomo_focus"].is<int>()) { pomoFocus = constrain(j["pomo_focus"].as<int>(), 1, 90); changed = true; }
   if (j["pomo_break"].is<int>()) { pomoBreak = constrain(j["pomo_break"].as<int>(), 1, 30); changed = true; }
+  if (j["fullscreen"].is<bool>()) { fullscreen = j["fullscreen"].as<bool>(); changed = true; }
   return changed;
 }

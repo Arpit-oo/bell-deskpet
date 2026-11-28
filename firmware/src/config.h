@@ -22,6 +22,8 @@ constexpr uint32_t EYE_FRAME_MS      = 33;     // ~30fps target
 constexpr uint32_t PANEL_ANIM_MS     = 40;     // marquee / eq / typewriter
 constexpr uint32_t HELPER_TIMEOUT_MS = 20000;  // companion considered offline after this
 constexpr long     TZ_OFFSET_S       = 19800;  // IST (UTC+5:30)
+constexpr int      BIRTH_Y = 2004, BIRTH_M = 12, BIRTH_D = 23;  // life-in-weeks screen
+constexpr int      LIFE_YEARS = 90;
 
 // ---- Palette (RGB565) ----
 // Monochrome: white face and text on pure black (matches the desktop pet).

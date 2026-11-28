@@ -11,3 +11,8 @@ void drawFocusView(TFT_eSprite &s, const Brain &brain, uint32_t now);  // pomodo
 // Dot-matrix (5x7 LED) text. `pitch` = px per dot cell. Returns width in px.
 int dotTextWidth(const char *txt, int pitch);
 void dotText(TFT_eSprite &s, const char *txt, int x, int y, int pitch, uint16_t on, uint16_t off, bool colonOn = true);
+
+// Life in weeks: drawn straight to the panel (full 320x240), not the sprite.
+// Returns false until the clock is set.
+bool drawLifeFull(TFT_eSPI &tft);
+void tickLife(TFT_eSPI &tft, uint32_t now);  // blinks the current week

@@ -540,6 +540,14 @@ fn run(cfg: Config) {
             expected.abs_diff(pos_ms) > 2000
         });
 
+        // Timer / pomodoro / screen picks from the pet's right-click menu.
+        for (path, body, label) in overlay::take_robot_cmds() {
+            let ok = device.post(path, &body).is_ok_and(|v| v["ok"] != false);
+            if let Some(p) = &pet {
+                p.say(if ok { &label } else { "Robot's offline" }, if ok { "happy" } else { "sleepy" }, 1800);
+            }
+        }
+
         // Clicking the desktop pet flips the robot's screen.
         let clicks = overlay::take_view_clicks();
         if clicks > 0 && device.is_online() {

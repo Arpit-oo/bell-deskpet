@@ -203,6 +203,7 @@ const char *viewName(View v) {
     case View::Music: return "music";
     case View::Clock: return "clock";
     case View::Focus: return "focus";
+    case View::Life: return "life";
     default: return "auto";
   }
 }
@@ -223,6 +224,7 @@ View Brain::cycleView(uint32_t now) {
   View next = cur == View::Face    ? View::Music
             : cur == View::Music ? View::Clock
             : cur == View::Clock ? View::Focus
+            : cur == View::Focus ? View::Life
                                  : View::Face;
   if (next == View::Music && !music_.hasTrack()) next = View::Clock;
   pinned_ = next;
@@ -236,6 +238,7 @@ bool Brain::setView(const String &name, uint32_t now) {
   else if (name == "music") v = View::Music;
   else if (name == "clock") v = View::Clock;
   else if (name == "focus") v = View::Focus;
+  else if (name == "life") v = View::Life;
   else if (name == "auto") v = View::Auto;
   else return false;
   pinned_ = v;

@@ -206,8 +206,10 @@ html.native ::-webkit-scrollbar-track{background:#000}
         <button onclick="view('music')"><b>Spotify</b><span>now playing card</span></button>
         <button onclick="view('clock')"><b>Clock</b><span>dot-matrix time</span></button>
         <button onclick="view('focus')"><b>Focus</b><span>pomodoro / timer</span></button>
+        <button onclick="view('life')"><b>Life</b><span>your life in weeks</span></button>
         <button class="ghost" onclick="view('auto')"><b>Auto</b><span>let Bell decide</span></button>
-      </div></div>
+      </div>
+      <div class="tog" style="margin-top:12px"><div><b>Full screen</b><div class="hint" style="margin:0">hide the robot's bottom strip</div></div><div class="switch" id="fullsw" onclick="fullscreen()"></div></div></div>
     <div class="card c12"><h2>Mood</h2><div class="row" style="flex-wrap:wrap" id="moods"></div></div>
   </div>
 </section>
@@ -241,6 +243,8 @@ function win(c){window.ipc&&window.ipc.postMessage(c)}
 document.addEventListener("mousedown",e=>{if(e.button===0&&e.target.closest("#tbar")&&!e.target.closest("button"))win("drag")});
 document.addEventListener("dblclick",e=>{if(e.target.closest("#tbar")&&!e.target.closest("button"))win("max")});
 async function timer(a,sec){try{const r=await fetch("/pet/api/timer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:a,seconds:sec})});const j=await r.json();toast(j.ok?(a==="stop"?"timer stopped":a==="add"?"+1 min":"timer started"):(j.err||"pet offline"))}catch(e){toast("pet offline")}}
+async function fullscreen(){const el=$("#fullsw");const on=!el.classList.contains("on");try{const r=await fetch("/pet/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullscreen:on})});const j=await r.json();if(j.ok===false)throw 0;el.classList.toggle("on",on);toast(on?"robot full screen":"bottom strip back")}catch(e){toast("pet offline")}}
+fetch("/pet/api/settings").then(r=>r.json()).then(j=>{if(j&&j.fullscreen)$("#fullsw").classList.add("on")}).catch(()=>{});
 async function view(v){try{const r=await fetch("/pet/api/view",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({view:v})});const j=await r.json();toast(j.ok?("robot: "+j.view):"pet offline")}catch(e){toast("pet offline")}}
 async function pet(u,b){const r=await fetch("/pet"+u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});const j=await r.json();toast(j.ok===false?(j.err||"pet offline"):"sent")}
 function petSay(){const v=$("#psay").value.trim();if(v){pet("/api/say",{text:v,mood:"excited",ms:7000});$("#psay").value=""}}

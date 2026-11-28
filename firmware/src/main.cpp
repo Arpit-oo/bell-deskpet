@@ -94,6 +94,24 @@ static void drawClaudeBadge(uint32_t now) {
 static void renderTop(uint32_t now) {
   if (!g_topOk) return;
   const View view = brain.topView(now);
+  static bool lifeOk = false;
+  static uint32_t lifeDrawnAt = 0;
+  if (view == View::Life) {
+    panel.setHidden(true);
+    // Redraw on entry, then every 10 min (or until the clock syncs).
+    if (g_lastView != View::Life || now - lifeDrawnAt > (lifeOk ? 600000UL : 2000UL)) {
+      lifeOk = drawLifeFull(tft);
+      lifeDrawnAt = now;
+    }
+    g_lastView = View::Life;
+    tickLife(tft, now);
+    return;
+  }
+  if (g_lastView == View::Life) {
+    tft.fillScreen(TFT_BLACK);
+    g_topY = -1000;  // force the layout to repaint margins
+    panel.markDirty();
+  }
   if (view != g_lastView) {
     g_lastView = view;
     g_viewSwitchAt = now;

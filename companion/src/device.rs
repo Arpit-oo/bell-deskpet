@@ -42,7 +42,7 @@ impl Device {
         self.online == Some(true)
     }
 
-    fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
+    pub fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
         self.agent
             .post(&format!("{}{path}", self.base))
             .send_json(body.clone())

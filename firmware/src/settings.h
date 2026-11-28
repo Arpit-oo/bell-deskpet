@@ -18,6 +18,7 @@ struct Settings {
   String name;
   uint8_t pomoFocus = 25;
   uint8_t pomoBreak = 5;
+  bool fullscreen = false;  // never show the bottom strip
 
   void load(Preferences &p);
   void save(Preferences &p) const;

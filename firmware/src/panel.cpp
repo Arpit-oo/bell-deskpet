@@ -102,6 +102,7 @@ void Panel::setPomodoro(bool active, bool focus, uint32_t remainingMs, uint32_t 
 void Panel::setClaude(ClaudeState st, const String &project) {
   const String p = asciiOnly(project);
   if (st != claude_ || p != claudeProject_) dirty_ = true;
+  if (st != claude_) claudeAt_ = millis();
   claude_ = st;
   claudeProject_ = p;
 }
@@ -391,7 +392,8 @@ void Panel::setHidden(bool h) {
 }
 
 bool Panel::wantsVisible(uint32_t now, bool musicView) const {
-  if (claude_ == ClaudeState::Waiting) return true;
+  if (g_settings.fullscreen) return false;
+  if (claude_ == ClaudeState::Waiting && now - claudeAt_ < 20000) return true;
   if (now < sayUntil_) return true;
   if (musicView) return false;  // music / focus screens own the display
   if (pomoActive_) return true;

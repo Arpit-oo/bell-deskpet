@@ -77,6 +77,7 @@ class Panel {
 
   ClaudeState claude_ = ClaudeState::None;
   String claudeProject_;
+  uint32_t claudeAt_ = 0;
 
   String taskTitle_;
   int taskEst_ = 0, tasksLeft_ = 0;

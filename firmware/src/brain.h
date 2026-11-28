@@ -35,7 +35,7 @@ struct StateMsg {
 enum class PomoPhase : uint8_t { Off, Focus, Break };
 
 // What the top canvas shows. Auto = face, music card when a track starts.
-enum class View : uint8_t { Auto, Face, Music, Clock, Focus };
+enum class View : uint8_t { Auto, Face, Music, Clock, Focus, Life };
 const char *viewName(View v);
 
 // Decides what the pet feels and shows.

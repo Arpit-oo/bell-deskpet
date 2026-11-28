@@ -37,10 +37,12 @@ the ARP table for `192.168.137.x` neighbours every 15 s while offline.
 - Desktop pet notch shows up at the top of the screen.
 - **Double-click the notch** (or right-click → Open Bell app) → native Bell window
   (`bell.exe --app`, frameless WebView2, same black/white look). Browser fallback: http://localhost:7777
-- **Click the notch** → robot screen cycles: Face → Spotify → Clock. Manual pick sticks 2 min, then auto.
-  Also on the app's Pet page (Face / Spotify / Clock / Auto).
+- **Click the notch** → robot screen cycles: Face → Spotify → Clock → Focus → Life in weeks. Manual pick sticks 2 min, then auto.
+- **Right-click the notch** → Timer (1m…1h, +1m, stop), Pomodoro (start/skip/stop), Robot screen (pick any, Full screen toggle).
+- App Pet page: same screens, timer card, Full screen switch (hides the robot's bottom strip; saved on the robot).
+- Life in weeks uses birthday `BIRTH_Y/M/D` in `firmware/src/config.h`.
 
-Robot screen API: `POST /api/view {"view":"next"|"face"|"music"|"clock"|"auto"}`.
+Robot screen API: `POST /api/view {"view":"next"|"face"|"music"|"clock"|"focus"|"life"|"auto"}`, `POST /api/timer {"action":"start"|"add"|"stop","seconds":N}`, `POST /api/settings {"fullscreen":true}`.
 
 ## 3. Check it's connected
 

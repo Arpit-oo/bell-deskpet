@@ -13,6 +13,19 @@ use std::sync::{Arc, Mutex};
 /// Pending "switch robot screen" clicks, drained by the main loop.
 pub static VIEW_CLICKS: AtomicU32 = AtomicU32::new(0);
 
+/// Robot commands picked from the pet's menu: (api path, json body, bubble text).
+pub static ROBOT_CMDS: Mutex<Vec<(&'static str, serde_json::Value, String)>> = Mutex::new(Vec::new());
+
+fn robot(path: &'static str, body: serde_json::Value, label: &str) {
+    if let Ok(mut q) = ROBOT_CMDS.lock() {
+        q.push((path, body, label.to_string()));
+    }
+}
+
+pub fn take_robot_cmds() -> Vec<(&'static str, serde_json::Value, String)> {
+    ROBOT_CMDS.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default()
+}
+
 pub fn take_view_clicks() -> u32 {
     VIEW_CLICKS.swap(0, Ordering::Relaxed)
 }
@@ -131,11 +144,14 @@ struct Prefs {
     /// Stay tucked into the top edge; drop down only when there's a message.
     #[serde(default)]
     quiet: bool,
+    /// Robot hides its bottom strip entirely.
+    #[serde(default)]
+    robot_full: bool,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { x: None, y: None, size: 1, lyrics: true, follow_mouse: true, quiet: false }
+        Prefs { x: None, y: None, size: 1, lyrics: true, follow_mouse: true, quiet: false, robot_full: false }
     }
 }
 
@@ -745,14 +761,45 @@ impl Pet {
         const SIZE0: usize = 10;
         const RESET: usize = 20;
         const QUIET: usize = 21;
+        const TIMER0: usize = 30; // + index into TIMERS
+        const TIMER_ADD: usize = 40;
+        const TIMER_STOP: usize = 41;
+        const POMO_START: usize = 42;
+        const POMO_SKIP: usize = 43;
+        const POMO_STOP: usize = 44;
+        const VIEW0: usize = 50; // + index into VIEWS
+        const FULL: usize = 60;
+        const TIMERS: [(&str, u32); 6] = [("1 min", 60), ("5 min", 300), ("10 min", 600), ("15 min", 900), ("25 min", 1500), ("1 hour", 3600)];
+        const VIEWS: [(&str, &str); 6] = [("Face", "face"), ("Spotify", "music"), ("Clock", "clock"), ("Focus", "focus"), ("Life in weeks", "life"), ("Auto", "auto")];
         unsafe {
             let m = CreatePopupMenu();
+            let tm = CreatePopupMenu();
+            for (i, (name, _)) in TIMERS.iter().enumerate() {
+                AppendMenuW(tm, MF_STRING, TIMER0 + i, wide(name).as_ptr());
+            }
+            AppendMenuW(tm, MF_SEPARATOR, 0, std::ptr::null());
+            AppendMenuW(tm, MF_STRING, TIMER_ADD, wide("+1 min").as_ptr());
+            AppendMenuW(tm, MF_STRING, TIMER_STOP, wide("Stop timer").as_ptr());
+            let pm = CreatePopupMenu();
+            AppendMenuW(pm, MF_STRING, POMO_START, wide("Start").as_ptr());
+            AppendMenuW(pm, MF_STRING, POMO_SKIP, wide("Skip phase").as_ptr());
+            AppendMenuW(pm, MF_STRING, POMO_STOP, wide("Stop").as_ptr());
+            let vm = CreatePopupMenu();
+            for (i, (name, _)) in VIEWS.iter().enumerate() {
+                AppendMenuW(vm, MF_STRING, VIEW0 + i, wide(name).as_ptr());
+            }
+            AppendMenuW(vm, MF_SEPARATOR, 0, std::ptr::null());
+            AppendMenuW(vm, MF_STRING | if self.prefs.robot_full { MF_CHECKED } else { 0 }, FULL, wide("Full screen (hide bottom strip)").as_ptr());
             let sub = CreatePopupMenu();
             for (i, (name, _)) in SIZES.iter().enumerate() {
                 let flags = MF_STRING | if i == self.prefs.size { MF_CHECKED } else { 0 };
                 AppendMenuW(sub, flags, SIZE0 + i, wide(name).as_ptr());
             }
             AppendMenuW(m, MF_STRING, OPEN, wide("Open Bell app").as_ptr());
+            AppendMenuW(m, MF_SEPARATOR, 0, std::ptr::null());
+            AppendMenuW(m, MF_STRING | MF_POPUP, tm as usize, wide("Timer").as_ptr());
+            AppendMenuW(m, MF_STRING | MF_POPUP, pm as usize, wide("Pomodoro").as_ptr());
+            AppendMenuW(m, MF_STRING | MF_POPUP, vm as usize, wide("Robot screen").as_ptr());
             AppendMenuW(m, MF_SEPARATOR, 0, std::ptr::null());
             AppendMenuW(m, MF_STRING | if self.prefs.quiet { MF_CHECKED } else { 0 }, QUIET, wide("Pop up only for messages").as_ptr());
             AppendMenuW(m, MF_STRING | MF_POPUP, sub as usize, wide("Size").as_ptr());
@@ -782,6 +829,24 @@ impl Pet {
                     std::process::exit(0);
                 }
                 c if (SIZE0..SIZE0 + SIZES.len()).contains(&c) => self.prefs.size = c - SIZE0,
+                c if (TIMER0..TIMER0 + TIMERS.len()).contains(&c) => {
+                    let (name, secs) = TIMERS[c - TIMER0];
+                    robot("/api/timer", serde_json::json!({ "action": "start", "seconds": secs }), &format!("Timer: {name}"));
+                }
+                TIMER_ADD => robot("/api/timer", serde_json::json!({ "action": "add", "seconds": 60 }), "Timer +1 min"),
+                TIMER_STOP => robot("/api/timer", serde_json::json!({ "action": "stop" }), "Timer stopped"),
+                POMO_START => robot("/api/pomodoro", serde_json::json!({ "action": "start" }), "Pomodoro on. Lock in!"),
+                POMO_SKIP => robot("/api/pomodoro", serde_json::json!({ "action": "skip" }), "Skipped"),
+                POMO_STOP => robot("/api/pomodoro", serde_json::json!({ "action": "stop" }), "Pomodoro off"),
+                c if (VIEW0..VIEW0 + VIEWS.len()).contains(&c) => {
+                    let (name, v) = VIEWS[c - VIEW0];
+                    robot("/api/view", serde_json::json!({ "view": v }), &format!("Robot: {name}"));
+                }
+                FULL => {
+                    self.prefs.robot_full = !self.prefs.robot_full;
+                    let on = self.prefs.robot_full;
+                    robot("/api/settings", serde_json::json!({ "fullscreen": on }), if on { "Robot: full screen" } else { "Robot: strip back" });
+                }
                 _ => {}
             }
             if cmd != 0 {
