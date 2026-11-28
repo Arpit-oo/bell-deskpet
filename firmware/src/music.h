@@ -6,7 +6,7 @@
 
 constexpr int ART_SIZE = 56;  // album art thumbnail (companion sends this size)
 
-// Now-playing state + the "vinyl" view drawn into the top canvas.
+// Now-playing state + the minimal now-playing card drawn into the top canvas.
 class NowPlaying {
  public:
   explicit NowPlaying(TFT_eSPI &tft);
@@ -31,11 +31,11 @@ class NowPlaying {
   uint32_t positionMs(uint32_t now) const;
   uint32_t durationMs() const { return durMs_; }
 
-  // Full now-playing layout for the 320x150 top canvas (small eyes included).
-  void drawTop(TFT_eSprite &s, Eyes &eyes, uint32_t now);
+  // Full now-playing card for the 320x150 top canvas (no face).
+  void drawTop(TFT_eSprite &s, uint32_t now);
 
  private:
-  void drawVinyl(TFT_eSprite &s, int cx, int cy, int r, uint32_t now);
+  void drawVinyl(TFT_eSprite &s, int cx, int cy, int r);
 
   TFT_eSPI &tft_;
   TFT_eSprite art_;

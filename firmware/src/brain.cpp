@@ -57,7 +57,11 @@ void Brain::apply(const StateMsg &msg) {
                     COL_MONO);
   }
   if (msg.hasLyrics) music_.setLyrics(msg.lyricCur, msg.lyricNext, msg.lyricLineMs);
-  if (msg.hasTask) panel_.setTask(msg.taskTitle, msg.taskEst, msg.tasksLeft);
+  if (msg.hasTask) {
+    panel_.setTask(msg.taskTitle, msg.taskEst, msg.tasksLeft);
+    taskTitle_ = msg.taskTitle;
+    tasksLeft_ = msg.tasksLeft;
+  }
   hasSuggested_ = msg.hasMood;
   if (msg.hasMood) suggested_ = msg.mood;
   if (msg.hasSay) say(msg.sayText, msg.sayMood, msg.sayMs);
@@ -118,6 +122,40 @@ bool Brain::pomodoro(const String &action) {
   return false;
 }
 
+uint32_t Brain::pomoFocusMs() const { return g_settings.pomoFocus * 60000UL; }
+
+bool Brain::timer(const String &action, uint32_t seconds) {
+  const uint32_t now = millis();
+  if (action == "start") {
+    if (seconds == 0) return false;
+    timerTotal_ = min<uint32_t>(seconds, 6 * 3600) * 1000UL;
+    timerEnd_ = now + timerTotal_;
+    timerOn_ = true;
+    timerDoneAt_ = 0;
+    pushEvent("timer_start");
+    return true;
+  }
+  if (action == "add" && timerOn_) {
+    timerEnd_ += seconds * 1000UL;
+    timerTotal_ += seconds * 1000UL;
+    return true;
+  }
+  if (action == "stop") {
+    timerOn_ = false;
+    timerDoneAt_ = 0;
+    return true;
+  }
+  return false;
+}
+
+void Brain::tickTimer(uint32_t now) {
+  if (!timerOn_ || static_cast<int32_t>(now - timerEnd_) < 0) return;
+  timerOn_ = false;
+  timerDoneAt_ = now ? now : 1;
+  say("Time's up, " + g_settings.name + "!", Mood::Excited, 6000);
+  pushEvent("timer_done");
+}
+
 void Brain::tickPomodoro(uint32_t now) {
   if (pomo_ == PomoPhase::Off) {
     panel_.setPomodoro(false, true, 0, 1, 0);
@@ -157,6 +195,52 @@ bool Brain::showMusicView(uint32_t now) const {
   const uint32_t t = now - music_.trackChangedAt();
   if (t < 25000) return true;                 // fresh track: show it off
   return ((t - 25000) % 60000) < 15000;       // then 15 s of every minute
+}
+
+const char *viewName(View v) {
+  switch (v) {
+    case View::Face: return "face";
+    case View::Music: return "music";
+    case View::Clock: return "clock";
+    case View::Focus: return "focus";
+    default: return "auto";
+  }
+}
+
+constexpr uint32_t kPinMs = 120000;  // manual view sticks for 2 min
+
+View Brain::topView(uint32_t now) const {
+  if (pinned_ != View::Auto && static_cast<int32_t>(pinnedUntil_ - now) > 0) {
+    if (pinned_ == View::Music && !music_.hasTrack()) return View::Face;
+    return pinned_;
+  }
+  if (timerOn_ || timerDoneRecently(now) || pomo_ != PomoPhase::Off) return View::Focus;
+  return showMusicView(now) ? View::Music : View::Face;
+}
+
+View Brain::cycleView(uint32_t now) {
+  const View cur = topView(now);
+  View next = cur == View::Face    ? View::Music
+            : cur == View::Music ? View::Clock
+            : cur == View::Clock ? View::Focus
+                                 : View::Face;
+  if (next == View::Music && !music_.hasTrack()) next = View::Clock;
+  pinned_ = next;
+  pinnedUntil_ = now + kPinMs;
+  return next;
+}
+
+bool Brain::setView(const String &name, uint32_t now) {
+  View v;
+  if (name == "face") v = View::Face;
+  else if (name == "music") v = View::Music;
+  else if (name == "clock") v = View::Clock;
+  else if (name == "focus") v = View::Focus;
+  else if (name == "auto") v = View::Auto;
+  else return false;
+  pinned_ = v;
+  pinnedUntil_ = now + kPinMs;
+  return true;
 }
 
 Mood Brain::resolveMood(uint32_t now) {
@@ -217,6 +301,7 @@ void Brain::update(uint32_t now) {
 
   if (!online) offlineHype(now);
   tickPomodoro(now);
+  tickTimer(now);
   tickClaude(now);
   eyes_.setBrows(g_settings.brows);
 

@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod activity;
+mod appwin;
 mod art;
 mod device;
 mod face;
@@ -84,6 +85,7 @@ struct Config {
 
 enum Cmd {
     Run(Config),
+    App,
     Once,
     Claude(Config, String, Option<String>),
     Install(Config),
@@ -110,6 +112,7 @@ fn parse_args() -> Result<Cmd, String> {
                 mode = "claude";
                 claude_state = args.next().ok_or("--claude needs a state")?;
             }
+            "--app" => mode = "app",
             "--install" => mode = "install",
             "--uninstall" => mode = "uninstall",
             "-h" | "--help" => mode = "help",
@@ -121,6 +124,7 @@ fn parse_args() -> Result<Cmd, String> {
         "once" => Cmd::Once,
         "claude" => Cmd::Claude(cfg, claude_state, project),
         "install" => Cmd::Install(cfg),
+        "app" => Cmd::App,
         "uninstall" => Cmd::Uninstall,
         "help" => Cmd::Help,
         _ => Cmd::Run(cfg),
@@ -536,6 +540,24 @@ fn run(cfg: Config) {
             expected.abs_diff(pos_ms) > 2000
         });
 
+        // Clicking the desktop pet flips the robot's screen.
+        let clicks = overlay::take_view_clicks();
+        if clicks > 0 && device.is_online() {
+            let mut shown = None;
+            for _ in 0..clicks.min(3) {
+                shown = device.set_view("next");
+            }
+            if let (Some(v), Some(p)) = (shown, &pet) {
+                let (label, mood) = match v.as_str() {
+                    "music" => ("Spotify", "music"),
+                    "clock" => ("Clock", "happy"),
+                    "focus" => ("Focus timer", "focus"),
+                    _ => ("Face", "love"),
+                };
+                p.say(&format!("Robot: {label}"), mood, 1600);
+            }
+        }
+
         let since_send = last_send.map_or(Duration::MAX, |t| now.duration_since(t));
         let changed = key != last_payload || pending_say.is_some() || drift;
         let backoff = if last_ok { Duration::ZERO } else { Duration::from_secs(5) };
@@ -553,6 +575,11 @@ fn run(cfg: Config) {
                         sh.live.focus_until = server::unix_now() + pomo_focus_min * 60;
                         if prefs.sounds {
                             sound::play(sound::Sound::Start);
+                        }
+                    }
+                    "timer_done" => {
+                        if prefs.sounds {
+                            sound::play(sound::Sound::Bell);
                         }
                     }
                     "pomo_break" => {
@@ -595,6 +622,7 @@ fn main() {
     };
     match cmd {
         Cmd::Run(cfg) => run(cfg),
+        Cmd::App => appwin::run(),
         Cmd::Claude(cfg, state, project) => claude_hook(cfg, state, project),
         Cmd::Once => {
             attach_console();

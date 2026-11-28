@@ -152,8 +152,15 @@ fn handle(mut req: Request, shared: &SharedRef, tx: &Sender<AppEvent>, proxy: &u
         return;
     }
 
+    if path == "/api/pet-url" {
+        let url = crate::device::current_base().unwrap_or_else(|| format!("http://{pet_host}"));
+        let _ = req.respond(json_resp(json!({ "ok": true, "url": url }), 200));
+        return;
+    }
+
     if let Some(rest) = path.strip_prefix("/pet/") {
-        let target = format!("http://{pet_host}/{rest}");
+        let base = crate::device::current_base().unwrap_or_else(|| format!("http://{pet_host}"));
+        let target = format!("{base}/{rest}");
         let res = if method == Method::Post {
             let body = body_json(&mut req);
             proxy.post(&target).send_json(body)

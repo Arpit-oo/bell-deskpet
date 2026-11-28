@@ -4,12 +4,10 @@
 
 namespace {
 
-constexpr uint16_t kArtKey = 0x0001;       // transparent key for the circular label mask
-constexpr uint16_t kVinyl = 0x10A2;        // record body
+constexpr uint16_t kVinyl = 0x10A2;   // record body
 constexpr uint16_t kGroove1 = 0x18E3;
 constexpr uint16_t kGroove2 = 0x2124;
 constexpr uint16_t kSheen = 0x4A69;
-constexpr uint16_t kTrack = 0x2945;        // progress track
 
 }  // namespace
 
@@ -67,14 +65,6 @@ bool NowPlaying::setArt(const uint8_t *data, size_t len) {
   if (!artOk_ || len != static_cast<size_t>(ART_SIZE * ART_SIZE * 2)) return false;
   // Bytes are big-endian RGB565 == sprite's native byte order, so copy straight in.
   art_.pushImage(0, 0, ART_SIZE, ART_SIZE, reinterpret_cast<const uint16_t *>(data));
-  const float r = ART_SIZE / 2.0f - 0.5f;
-  for (int y = 0; y < ART_SIZE; y++) {
-    for (int x = 0; x < ART_SIZE; x++) {
-      const float dx = x - r, dy = y - r;
-      if (dx * dx + dy * dy > r * r) art_.drawPixel(x, y, kArtKey);
-    }
-  }
-  art_.fillCircle(ART_SIZE / 2, ART_SIZE / 2, 4, TFT_BLACK);  // spindle hole
   hasArt_ = true;
   return true;
 }
@@ -101,64 +91,59 @@ uint32_t NowPlaying::positionMs(uint32_t now) const {
   return p;
 }
 
-void NowPlaying::drawVinyl(TFT_eSprite &s, int cx, int cy, int r, uint32_t now) {
+void NowPlaying::drawVinyl(TFT_eSprite &s, int cx, int cy, int r) {
   s.fillSmoothCircle(cx, cy, r, kVinyl, TFT_BLACK);
-  for (int g = r - 6; g > 32; g -= 5) s.drawCircle(cx, cy, g, (g / 5) % 2 ? kGroove1 : kGroove2);
+  for (int g = r - 5; g > 24; g -= 4) s.drawCircle(cx, cy, g, (g / 4) % 2 ? kGroove1 : kGroove2);
 
-  // Rotating light sheen sells the spin.
+  // Two rotating light sheens sell the spin.
   const uint32_t a = static_cast<uint32_t>(angle_) % 360;
-  s.drawSmoothArc(cx, cy, r - 3, 34, a, (a + 28) % 360, kSheen, kVinyl, true);
-  s.drawSmoothArc(cx, cy, r - 3, 34, (a + 180) % 360, (a + 208) % 360, kSheen, kVinyl, true);
+  s.drawSmoothArc(cx, cy, r - 4, 26, a, (a + 24) % 360, kSheen, kVinyl, true);
+  s.drawSmoothArc(cx, cy, r - 4, 26, (a + 180) % 360, (a + 204) % 360, kSheen, kVinyl, true);
 
-  // Label: rotating album art, or the album colour.
-  if (hasArt_) {
-    s.setPivot(cx, cy);
-    art_.pushRotated(&s, static_cast<int16_t>(angle_), kArtKey);
-  } else {
-    s.fillSmoothCircle(cx, cy, ART_SIZE / 2, color_, kVinyl);
-    // Small mark so the spin is visible even without art.
-    const float rad = angle_ * DEG_TO_RAD;
-    s.fillCircle(cx + static_cast<int>(cosf(rad) * 18), cy + static_cast<int>(sinf(rad) * 18), 3, TFT_BLACK);
-    s.fillCircle(cx, cy, 4, TFT_BLACK);
-  }
-  s.drawCircle(cx, cy, ART_SIZE / 2 + 1, kGroove2);
+  // Plain white label with a rotating mark + spindle.
+  s.fillSmoothCircle(cx, cy, 20, COL_MONO, kVinyl);
+  const float rad = angle_ * DEG_TO_RAD;
+  s.fillSmoothCircle(cx + static_cast<int>(cosf(rad) * 12), cy + static_cast<int>(sinf(rad) * 12), 2, TFT_BLACK, COL_MONO);
+  s.fillSmoothCircle(cx, cy, 3, TFT_BLACK, COL_MONO);
 
-  // Tone arm resting on the record.
-  const int px = cx + r + 4, py = cy - r + 6;
-  const float lift = playing_ ? 0 : 10;  // arm swings off when paused
-  s.drawWideLine(px, py, cx + 40 + lift, cy - 4 - lift, 4, COL_SUBTLE, TFT_BLACK);
-  s.fillSmoothRoundRect(static_cast<int>(cx + 34 + lift), static_cast<int>(cy - 8 - lift), 12, 8, 3, 0xBDF7,
-                        TFT_BLACK);
-  s.fillSmoothCircle(px, py, 6, 0x6B4D, TFT_BLACK);
-  s.fillSmoothCircle(px, py, 2, COL_GLINT, 0x6B4D);
-  (void)now;
+  // Tone arm: rests on the record while playing, swings off when paused.
+  const int px = cx + r + 6, py = cy - r + 8;
+  const float lift = playing_ ? 0 : 14;
+  const int hx = static_cast<int>(cx + 30 + lift), hy = static_cast<int>(cy - 10 - lift);
+  s.drawWideLine(px, py, hx, hy, 3, COL_SUBTLE, TFT_BLACK);
+  s.fillSmoothRoundRect(hx - 5, hy - 3, 11, 7, 2, COL_MONO, TFT_BLACK);
+  s.fillSmoothCircle(px, py, 5, 0x4208, TFT_BLACK);
+  s.fillSmoothCircle(px, py, 2, COL_MONO, 0x4208);
 }
 
-void NowPlaying::drawTop(TFT_eSprite &s, Eyes &eyes, uint32_t now) {
-  const float dt = lastFrame_ ? (now - lastFrame_) : 0;
+void NowPlaying::drawTop(TFT_eSprite &s, uint32_t now) {
+  const float dt = lastFrame_ ? static_cast<float>(now - lastFrame_) : 0.0f;
   lastFrame_ = now;
   if (playing_) angle_ = fmodf(angle_ + dt * 0.2f, 360.0f);  // 33 1/3 rpm
 
-  drawVinyl(s, 78, 76, 66, now);
+  drawVinyl(s, 72, 75, 62);
 
-  // Tiny vibing face top-right.
-  eyes.draw(s, 240, 34, 0.38f);
+  const int x0 = 160, w = 320 - x0 - 14;
+
+  s.setTextFont(1);
+  s.setTextColor(COL_SUBTLE);
+  s.setTextDatum(TL_DATUM);
+  s.drawString(playing_ ? "NOW PLAYING" : "PAUSED", x0, 22);
 
   // Title (scrolls inside a clipped viewport).
-  const int x0 = 166, w = 148;
-  s.setViewport(x0, 70, w, 26);
+  s.setViewport(x0, 36, w, 28);
   s.setFreeFont(&FreeSansBold12pt7b);
   s.setTextColor(COL_TEXT);
   s.setTextDatum(ML_DATUM);
   const int tw = s.textWidth(track_);
   if (tw <= w) {
-    s.drawString(track_, 0, 13);
+    s.drawString(track_, 0, 14);
   } else {
     const int period = tw + 40;
     const uint32_t t = now - trackSince_;
-    const int off = t < 1800 ? 0 : static_cast<int>(((t - 1800) / 30) % period);
-    s.drawString(track_, -off, 13);
-    s.drawString(track_, -off + period, 13);
+    const int off = t < 2200 ? 0 : static_cast<int>(((t - 2200) / 28) % period);
+    s.drawString(track_, -off, 14);
+    s.drawString(track_, -off + period, 14);
   }
   s.resetViewport();
 
@@ -167,21 +152,35 @@ void NowPlaying::drawTop(TFT_eSprite &s, Eyes &eyes, uint32_t now) {
   while (a.length() > 3 && s.textWidth(a) > w) a.remove(a.length() - 1);
   if (a != artist_) a += "...";
   s.setTextColor(COL_SUBTLE);
-  s.drawString(a, x0, 106);
+  s.setTextDatum(ML_DATUM);
+  s.drawString(a, x0, 76);
 
-  // Progress bar.
-  const uint32_t pos = positionMs(now);
-  const int barY = 124;
-  s.fillSmoothRoundRect(x0, barY, w, 4, 2, kTrack, TFT_BLACK);
+  // Line visualizer: a calm waveform tapered at both ends; flat when paused.
+  const int vy = 106;
+  const float tt = now / 1000.0f;
+  int lx = x0, ly = vy;
+  for (int x = x0; x <= x0 + w; x += 3) {
+    const float u = static_cast<float>(x - x0) / w;
+    const float env = sinf(u * PI);
+    float v = 0;
+    if (playing_) {
+      v = sinf(u * 19.0f + tt * 7.0f) * 0.55f + sinf(u * 37.0f - tt * 11.0f) * 0.3f +
+          sinf(u * 7.0f + tt * 3.0f) * 0.35f;
+      v *= 0.75f + 0.25f * sinf(tt * 2.3f);
+    }
+    const int y = vy + static_cast<int>(v * env * 12.0f);
+    if (x > x0) s.drawWideLine(lx, ly, x, y, 2, COL_MONO, TFT_BLACK);
+    lx = x;
+    ly = y;
+  }
+
   if (durMs_ > 0) {
-    const int fw = max(4, static_cast<int>(static_cast<uint64_t>(w) * pos / durMs_));
-    s.fillSmoothRoundRect(x0, barY, fw, 4, 2, color_, TFT_BLACK);
-    s.fillSmoothCircle(x0 + fw, barY + 2, 4, COL_GLINT, TFT_BLACK);
+    const uint32_t pos = positionMs(now);
     s.setTextFont(1);
     s.setTextColor(COL_SUBTLE);
     s.setTextDatum(TL_DATUM);
-    s.drawString(fmtClock(pos), x0, barY + 10);
+    s.drawString(fmtClock(pos), x0, 126);
     s.setTextDatum(TR_DATUM);
-    s.drawString("-" + fmtClock(durMs_ - pos), x0 + w, barY + 10);
+    s.drawString(fmtClock(durMs_), x0 + w, 126);
   }
 }

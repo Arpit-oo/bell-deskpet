@@ -393,8 +393,8 @@ void Panel::setHidden(bool h) {
 bool Panel::wantsVisible(uint32_t now, bool musicView) const {
   if (claude_ == ClaudeState::Waiting) return true;
   if (now < sayUntil_) return true;
+  if (musicView) return false;  // music / focus screens own the display
   if (pomoActive_) return true;
-  if (musicView) return true;
   return now < peekUntil_;
 }
 

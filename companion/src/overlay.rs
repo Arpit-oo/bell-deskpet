@@ -7,7 +7,15 @@
 //! companion loop is waiting on the network.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+
+/// Pending "switch robot screen" clicks, drained by the main loop.
+pub static VIEW_CLICKS: AtomicU32 = AtomicU32::new(0);
+
+pub fn take_view_clicks() -> u32 {
+    VIEW_CLICKS.swap(0, Ordering::Relaxed)
+}
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -378,7 +386,14 @@ fn fullscreen_app_active(me: HWND) -> bool {
 }
 
 fn open_app() {
-    let _ = std::process::Command::new("explorer").arg(APP_URL).spawn();
+    // Native window (bell.exe --app); browser only as a fallback.
+    let spawned = std::env::current_exe().ok().is_some_and(|exe| {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new(exe).arg("--app").creation_flags(0x0000_0008).spawn().is_ok()
+    });
+    if !spawned {
+        let _ = std::process::Command::new("explorer").arg(APP_URL).spawn();
+    }
 }
 
 /// Rough syllable count for lip-sync.
@@ -710,6 +725,7 @@ impl Pet {
     }
 
     fn pet(&mut self, now: f32) {
+        VIEW_CLICKS.fetch_add(1, Ordering::Relaxed);
         match (now as u64 / 7) % 3 {
             0 => self.temp_mood = Some((Mood::Love, now + 1600.0)),
             1 => {

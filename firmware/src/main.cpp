@@ -28,6 +28,7 @@
 #include "config.h"
 #include "eyes.h"
 #include "music.h"
+#include "views.h"
 #include "panel.h"
 #include "settings.h"
 #include "webapp.h"
@@ -46,7 +47,7 @@ static bool g_netUp = false;
 static bool g_otaActive = false;
 static bool g_topOk = false;
 static uint32_t g_lastFrame = 0;
-static bool g_lastMusicView = false;
+static View g_lastView = View::Face;
 static uint32_t g_viewSwitchAt = 0;
 
 // Face-full layout: 0 = face on top + info panel, 1 = face centred on the whole
@@ -92,11 +93,12 @@ static void drawClaudeBadge(uint32_t now) {
 
 static void renderTop(uint32_t now) {
   if (!g_topOk) return;
-  const bool musicView = brain.showMusicView(now);
-  if (musicView != g_lastMusicView) {
-    g_lastMusicView = musicView;
+  const View view = brain.topView(now);
+  if (view != g_lastView) {
+    g_lastView = view;
     g_viewSwitchAt = now;
   }
+  const bool musicView = view == View::Music || view == View::Focus;
 
   // Layout: slide the face down to centre when the panel has nothing to show.
   const bool wantPanel = panel.wantsVisible(now, musicView);
@@ -114,8 +116,12 @@ static void renderTop(uint32_t now) {
   }
 
   top.fillSprite(TFT_BLACK);
-  if (musicView) {
-    music.drawTop(top, eyes, now);
+  if (view == View::Music) {
+    music.drawTop(top, now);
+  } else if (view == View::Clock) {
+    drawClockView(top, brain, now);
+  } else if (view == View::Focus) {
+    drawFocusView(top, brain, now);
   } else {
     eyes.draw(top, EYES_W / 2, static_cast<int>(84 - 6 * e), 1.0f + 0.08f * e);
     drawClaudeBadge(now);
@@ -203,6 +209,26 @@ static void handleState() {
   }
   brain.apply(msg);
   server.send(200, "application/json", "{\"ok\":true,\"events\":" + brain.takeEventsJson() + "}");
+}
+
+static void handleView() {
+  JsonDocument doc;
+  if (!parseBody(doc)) return;
+  const String v = doc["view"] | "next";
+  const uint32_t now = millis();
+  if (v == "next") brain.cycleView(now);
+  else if (!brain.setView(v, now)) return sendErr("bad view");
+  server.send(200, "application/json", String("{\"ok\":true,\"view\":\"") + viewName(brain.topView(now)) + "\"}");
+}
+
+static void handleTimer() {
+  JsonDocument doc;
+  if (!parseBody(doc)) return;
+  const String action = doc["action"] | "";
+  const uint32_t secs = doc["seconds"] | 0;
+  if (!brain.timer(action, secs)) return sendErr("bad timer action");
+  if (action != "stop") brain.setView("focus", millis());
+  sendOk();
 }
 
 static void handleSay() {
@@ -334,6 +360,8 @@ static void onNetworkUp() {
   server.on("/api/settings", HTTP_POST, handleSettingsPost);
   server.on("/api/state", HTTP_POST, handleState);
   server.on("/api/say", HTTP_POST, handleSay);
+  server.on("/api/view", HTTP_POST, handleView);
+  server.on("/api/timer", HTTP_POST, handleTimer);
   server.on("/api/mood", HTTP_POST, handleMood);
   server.on("/api/anim", HTTP_POST, handleAnim);
   server.on("/api/claude", HTTP_POST, handleClaude);
